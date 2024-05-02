@@ -10,6 +10,7 @@ from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     namespace = "sam0"
+    use_sim_time = True
 
     print("Launching sam_dr_launch.py")
 
@@ -32,7 +33,7 @@ def generate_launch_description():
             name="depth_node",
             output="screen",
             parameters=[{
-                "use_sim_time": True,
+                "use_sim_time": use_sim_time,
                 "robot_name": namespace,
                 "simulation": True
 
@@ -46,7 +47,7 @@ def generate_launch_description():
             respawn=True,
             output="screen",
             parameters=[{
-                "use_sim_time": True,
+                "use_sim_time": use_sim_time,
                 "robot_name": namespace,
                 "map_frame": "map",
                 "utm_frame": "utm"
@@ -59,7 +60,7 @@ def generate_launch_description():
             name="dr_node",
             output="screen",
             parameters=[{
-                "use_sim_time": True,
+                "use_sim_time": use_sim_time,
                 "robot_name": namespace,
                 "odom_frame": "odom",  # changed
                 "map_frame": "map",
@@ -77,6 +78,8 @@ def generate_launch_description():
             output="screen",
             parameters=[{
                 "use_sim_time": True,
+                "convert_dr": True,
+                "verbose": False
             }]
         )
 

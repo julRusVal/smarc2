@@ -42,20 +42,28 @@ def yaw_enu_2_compass_heading(yaw: float) -> float:
 
 class YawEnu2CompassHeading(Node):
     """
-    This node will convert the yaw (enu) to compass heading in degrees
-
-    Note: this node will subscribe to the default yaw topic defined in dead_reckoning_msgs.
+    This node will convert the yaw (enu) to compass heading in degrees.
+    The yaw can be provided by either the SBG IMU or by dead reckoning.
+    Reporting the dead reckoning is the default.
     """
 
     def __init__(self, namespace=None):
         super().__init__("yaw_enu_2_compass_heading", namespace=namespace)
         self.get_logger().info("Starting node defined in yaw_enu_2_compass_heading.py")
 
-        self.yaw_topic = DRTopics.DR_YAW_TOPIC
+        # Set source via parameter
+        self.declare_parameter("convert_dr_yaw", True)
+        self.convert_dr_yaw = self.get_parameter("convert_dr_yaw").value
 
-        # Output topics
-        # compass heading
-        self.compass_heading_topic = DRTopics.DR_COMPASS_HEADING_TOPIC
+        # Set topics according to source
+        # Input: a yaw topic
+        # Output: corresponding compass heading topic
+        if self.convert_dr_yaw:
+            self.yaw_topic = DRTopics.DR_YAW_TOPIC
+            self.compass_heading_topic = DRTopics.DR_COMPASS_HEADING_TOPIC
+        else:
+            self.yaw_topic = SamTopics.SBG_IMU_YAW_TOPIC
+            self.compass_heading_topic = SamTopics.SBG_IMU_COMPASS_HEADING_TOPIC
 
         self.create_subscription(msg_type=Float64, topic=self.yaw_topic,
                                  callback=self.yaw_callback, qos_profile=10)
@@ -69,7 +77,10 @@ class YawEnu2CompassHeading(Node):
         # Convert to
         compass_heading = yaw_enu_2_compass_heading(yaw_enu)
 
-        self.get_logger().info(f"Compass heading (deg): {compass_heading}")
+        if self.convert_dr_yaw:
+            self.get_logger().info(f"DR compass heading (deg): {compass_heading}")
+        else:
+            self.get_logger().info(f"SBG compass heading (deg): {compass_heading}")
 
         # Construct messages and publish
         compass_heading_msg = Float64()

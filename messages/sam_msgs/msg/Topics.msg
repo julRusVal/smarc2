@@ -22,7 +22,12 @@ string THRUSTER1_FB_TOPIC = 'core/thruster1_fb'
 string THRUSTER2_FB_TOPIC = 'core/thruster2_fb'
 
 string STIM_IMU_TOPIC = 'core/imu'
+
 string SBG_IMU_TOPIC = 'core/sbg_imu'
+string SBG_IMU_ROLL_TOPIC = 'core/sbg_imu_roll'
+string SBG_IMU_PITCH_TOPIC = 'core/sbg_imu_pitch'
+string SBG_IMU_YAW_TOPIC = 'core/sbg_imu_yaw'
+string SBG_IMU_COMPASS_HEADING_TOPIC = 'core/sbg_imu_compass_heading'
 
 string PRESS_DEPTH20_TOPIC = 'core/depth20_pressure'
 
