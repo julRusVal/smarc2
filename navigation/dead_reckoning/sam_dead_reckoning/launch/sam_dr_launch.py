@@ -79,7 +79,19 @@ def generate_launch_description():
             parameters=[{
                 "use_sim_time": True,
                 "convert_dr": True,
-                "verbose": False
+                "verbose": True
+            }]
+        ),
+        Node(
+            package="sam_dead_reckoning",
+            executable="rpy_node",
+            namespace=namespace,
+            name="sbg_rpy_node",
+            output="screen",
+            parameters=[{
+                "use_sim_time": True,
+                "convert_dr": False,
+                "verbose": True
             }]
         )
 

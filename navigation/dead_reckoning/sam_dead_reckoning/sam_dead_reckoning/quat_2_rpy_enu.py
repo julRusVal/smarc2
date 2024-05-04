@@ -36,8 +36,8 @@ class Quat2rpy(Node):
 
         # Parameters
         # Set source via parameter
-        self.declare_parameter("convert_dr_quat", True)
-        self.convert_dr = self.get_parameter("convert_dr_yaw").value
+        self.declare_parameter("convert_dr", True)
+        self.convert_dr = self.get_parameter("convert_dr").value
 
         # Set verboseness
         self.declare_parameter("verbose", False)
@@ -45,15 +45,6 @@ class Quat2rpy(Node):
 
         # Set the corresponding topics
         if self.convert_dr:
-            self.sbg_topic = SamTopics.SBG_IMU_TOPIC
-            self.create_subscription(msg_type=Imu, topic=self.sbg_topic,
-                                     callback=self.sbg_imu_callback, qos_profile=10)
-
-            # Output topic
-            self.roll_topic = SamTopics.SBG_IMU_ROLL_TOPIC
-            self.pitch_topic = SamTopics.SBG_IMU_PITCH_TOPIC
-            self.yaw_topic = SamTopics.SBG_IMU_YAW_TOPIC
-        else:
             self.dr_topic = DRTopics.DR_ODOM_TOPIC
             self.create_subscription(msg_type=Odometry, topic=self.dr_topic,
                                      callback=self.dr_odom_callback, qos_profile=10)
@@ -62,6 +53,15 @@ class Quat2rpy(Node):
             self.roll_topic = DRTopics.DR_ROLL_TOPIC
             self.pitch_topic = DRTopics.DR_PITCH_TOPIC
             self.yaw_topic = DRTopics.DR_YAW_TOPIC
+        else:
+            self.sbg_topic = SamTopics.SBG_IMU_TOPIC
+            self.create_subscription(msg_type=Imu, topic=self.sbg_topic,
+                                     callback=self.sbg_imu_callback, qos_profile=10)
+
+            # Output topic
+            self.roll_topic = SamTopics.SBG_IMU_ROLL_TOPIC
+            self.pitch_topic = SamTopics.SBG_IMU_PITCH_TOPIC
+            self.yaw_topic = SamTopics.SBG_IMU_YAW_TOPIC
 
         # Publishers
         self.roll_pub = self.create_publisher(msg_type=Float64, topic=self.roll_topic, qos_profile=10)
@@ -84,7 +84,8 @@ class Quat2rpy(Node):
         self.publish_rpy(roll, pitch, yaw)
 
     def dr_odom_callback(self, dr_msg):
-        quat = dr_msg.orientation
+        frame_id = dr_msg.header.frame_id
+        quat = dr_msg.pose.pose.orientation
         euler = euler_from_quaternion([quat.x, quat.y, quat.z, quat.w])
 
         roll = euler[0]
@@ -92,7 +93,7 @@ class Quat2rpy(Node):
         yaw = euler[2]
 
         if self.verbose:
-            self.get_logger().info(f"SBG roll: {roll:.2f} - pitch: {pitch:.2f} - yaw: {yaw:.2f}")
+            self.get_logger().info(f"DR ({frame_id}) roll: {roll:.2f} - pitch: {pitch:.2f} - yaw: {yaw:.2f}")
 
         self.publish_rpy(roll, pitch, yaw)
 

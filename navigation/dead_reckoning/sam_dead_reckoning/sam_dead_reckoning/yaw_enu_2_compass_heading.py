@@ -52,13 +52,13 @@ class YawEnu2CompassHeading(Node):
         self.get_logger().info("Starting node defined in yaw_enu_2_compass_heading.py")
 
         # Set source via parameter
-        self.declare_parameter("convert_dr_yaw", True)
-        self.convert_dr_yaw = self.get_parameter("convert_dr_yaw").value
+        self.declare_parameter("convert_dr", True)
+        self.convert_dr = self.get_parameter("convert_dr").value
 
         # Set topics according to source
         # Input: a yaw topic
         # Output: corresponding compass heading topic
-        if self.convert_dr_yaw:
+        if self.convert_dr:
             self.yaw_topic = DRTopics.DR_YAW_TOPIC
             self.compass_heading_topic = DRTopics.DR_COMPASS_HEADING_TOPIC
         else:
