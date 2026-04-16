@@ -50,7 +50,7 @@ The **loiter action server** maintains FloatSam's position within a specified to
 ### 1. Launch the Server
 
 ```bash
-ros2 launch floatsam_move_to floatsam_loiter_launch.py robot_name:=floatsam_usv
+ros2 launch floatsam_loiter floatsam_loiter_launch.py robot_name:=floatsam_usv
 ```
 
 **Note**: The `move_to` action server must also be running:

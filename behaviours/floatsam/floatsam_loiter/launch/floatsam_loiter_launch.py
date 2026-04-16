@@ -13,7 +13,7 @@ def generate_launch_description():
     )
 
     loiter_server_node = Node(
-        package='floatsam_move_to',
+        package='floatsam_loiter',
         namespace=robot_ns,
         executable='floatsam_loiter_action_server',
         name='floatsam_loiter_action_server',

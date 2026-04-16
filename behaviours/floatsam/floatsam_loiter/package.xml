@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>floatsam_move_to</name>
+  <name>floatsam_loiter</name>
   <version>0.0.0</version>
-  <description>Move to action server for FloatSam USV</description>
-  <maintainer email="mannolorenzo421@gmail.com">lorenzo</maintainer>
+  <description>Loiter action server for FloatSam USV</description>
+  <maintainer email="alebas@kth.se">lorenzo</maintainer>
   <license>TODO: License declaration</license>
 
   <depend>floatsam_msgs</depend>

@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 import os
 import glob
 
-package_name = 'floatsam_move_to'
+package_name = 'floatsam_loiter'
 
 setup(
     name=package_name,
@@ -18,7 +18,7 @@ setup(
     zip_safe=True,
     maintainer='lorenzo',
     maintainer_email='mannolorenzo421@gmail.com',
-    description='TODO: Package description',
+    description='Loiter action server for FloatSam USV',
     license='TODO: License declaration',
     extras_require={
         'test': [
@@ -27,7 +27,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'floatsam_move_to_action_server = floatsam_move_to.floatsam_move_to_server:main',
+            'floatsam_loiter_action_server = floatsam_loiter.floatsam_loiter_server:main',
         ],
     },
 )
