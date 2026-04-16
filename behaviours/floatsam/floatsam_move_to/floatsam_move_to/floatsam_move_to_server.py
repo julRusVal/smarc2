@@ -13,7 +13,7 @@ from floatsam_controllers.floatsam_common import FloatSam
 
 from smarc_msgs.msg import FloatStamped
 from floatsam_msgs.msg import Topics as FloatsamTopics
-from floatsam_interfaces.srv import GetSafeVelocity
+from floatsam_msgs.srv import GetSafeVelocity
 from geometry_msgs.msg import  PointStamped, PoseStamped
 from geographic_msgs.msg import GeoPoint
 from geometry_msgs.msg import PointStamped

@@ -7,7 +7,7 @@
   <maintainer email="mannolorenzo421@gmail.com">lorenzo</maintainer>
   <license>TODO: License declaration</license>
 
-  <depend>floatsam_interfaces</depend>
+  <depend>floatsam_msgs</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

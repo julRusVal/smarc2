@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 
 from .floatsam_common import FloatSam
-from floatsam_interfaces.srv import GetSafeVelocity  
+from floatsam_msgs.srv import GetSafeVelocity
 from tf2_geometry_msgs import do_transform_pose_stamped
 
 from nav_msgs.msg import Odometry
