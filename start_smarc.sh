@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Define the container name
-CONTAINER_NAME="smarc2_docker"
+CONTAINER_NAME="smarc2"
 
 # Go to the correct folder
-cd ~/Desktop/smarc_docker/smarc2
+cd ~/smarc2
 
 # Check if the container already exists (stopped or running)
 if [ "$(docker ps -aq -f name=${CONTAINER_NAME})" ]; then
@@ -17,11 +17,14 @@ if [ "$(docker ps -aq -f name=${CONTAINER_NAME})" ]; then
         docker start -ai ${CONTAINER_NAME}
     fi
 else
-    echo "Creating a NEW container..."
-    # Note: No --rm flag, so it saves when you exit
+    echo "Creating a NEW container..."    
+    
+    # Note: Added --network host to allow PX4 UDP packets to reach the container
     docker run -it \
+        --device=/dev/gps_rtk_0:/dev/gps_rtk_0 \
+        --device=/dev/gps_rtk_1:/dev/gps_rtk_1 \
         --name ${CONTAINER_NAME} \
-        -p 10000:10000 \
+        --network host \
         -v $(pwd):/home/smarc2user/colcon_ws/src/smarc2 \
         smarc2
-fi
+fi  
