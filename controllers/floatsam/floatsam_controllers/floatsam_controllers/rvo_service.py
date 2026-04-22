@@ -1,6 +1,7 @@
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 
 from .floatsam_common import FloatSam
 from floatsam_msgs.srv import GetSafeVelocity
@@ -175,22 +176,25 @@ class RVOservice(Node):
 # --- Nodes parameters --- #
     def declare_node_parameters(self):
         """Declare all configurable parameters for PIDs and mixer"""
-        self.declare_parameter("robot_name", "floatsam_0")
-        self.declare_parameter("use_sim", True)
-        self.declare_parameter("time_horizon", 0.5)
-        self.declare_parameter("safety_margin", 0.5)
-        self.declare_parameter("max_speed", 3.0)
-        self.declare_parameter("update_rate", 0.0)
-        self.declare_parameter("num_robot", 3)
+        double_desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE)
+        string_desc = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
+        bool_desc = ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)
+        self.declare_parameter("robot_name", "floatsam_0", string_desc)
+        self.declare_parameter("use_sim", True, bool_desc)
+        self.declare_parameter("time_horizon", 0.5, double_desc)
+        self.declare_parameter("safety_margin", 0.5, double_desc)
+        self.declare_parameter("max_speed", 3.0, double_desc)
+        self.declare_parameter("update_rate", 0.0, double_desc)
+        self.declare_parameter("num_robot", 3, double_desc)
 
     def get_node_parameters(self):
-        self.this_robot_name = str(self.get_parameter("robot_name").value)
-        self.use_sim = self.get_parameter("use_sim").value
-        self.update_rate = float(self.get_parameter("update_rate").value)
-        self.safety_margin = float(self.get_parameter("safety_margin").value)
-        self.max_speed = float(self.get_parameter("max_speed").value)
-        self.time_horizon = float(self.get_parameter("time_horizon").value)
-        self.num_robot = int(self.get_parameter("num_robot").value)
+        self.this_robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
+        self.use_sim = self.get_parameter("use_sim").get_parameter_value().bool_value
+        self.update_rate = self.get_parameter("update_rate").get_parameter_value().double_value
+        self.safety_margin = self.get_parameter("safety_margin").get_parameter_value().double_value
+        self.max_speed = self.get_parameter("max_speed").get_parameter_value().double_value
+        self.time_horizon = self.get_parameter("time_horizon").get_parameter_value().double_value
+        self.num_robot = self.get_parameter("num_robot").get_parameter_value().integer_value
         self.robot_ids = range(self.num_robot)
         self.robot_base_name = '_'.join(self.this_robot_name.split('_')[:-1])
     
@@ -223,21 +227,18 @@ class RVOservice(Node):
         velocity_in_odom = msg.twist.twist.linear
 
         try:
-            # LIVE LOOKUP to the GLOBAL Map
             odom_to_global_tf = self._floatsam._tf_buffer.lookup_transform(
                 self._floatsam.GLOBAL_MAP_FRAME,  
                 msg.header.frame_id,       
                 rclpy.time.Time()          
             )
         except Exception as e:
-            # Safely skip this tick if the TF tree isn't ready
             self.get_logger().warn(
                 f"[RVO {robot_name}] Waiting for TF: {msg.header.frame_id} -> {self._floatsam.GLOBAL_MAP_FRAME}",
                 throttle_duration_sec=2.0
             )
             return
 
-        # Apply the transform
         try:
             pose_in_global = do_transform_pose_stamped(pose_in_odom, odom_to_global_tf)
         except Exception as e:

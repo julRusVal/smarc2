@@ -1,0 +1,8 @@
+/**:
+  ros__parameters:
+    'robot_name': robot_name
+    'time_horizon': 2.0               
+    'safety_margin': 3.0               
+    'max_speed': 2.0                   
+    'update_rate': 20.0                
+    'num_robot': 3
