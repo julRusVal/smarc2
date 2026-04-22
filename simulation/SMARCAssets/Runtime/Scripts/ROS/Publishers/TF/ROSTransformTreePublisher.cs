@@ -9,6 +9,7 @@ using ROS.Core;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/TF_Pub")]
     public class ROSTransformTreePublisher : ROSPublisher<TFMessageMsg>
     {
         [Header("TF Tree Publisher")]
@@ -16,6 +17,8 @@ namespace ROS.Publishers
         public Transform MapFrameTransform;
         [Tooltip("Adds a prefix to all TF frames published by this publisher, except unity_origin.")]
         public string tf_prefix = "";
+        [Tooltip("Publish without any connection to the world frames. This is useful when you want to publish _just this bit_ of the TF independently of its global position.")]
+        public bool OnlyRelative = false;
         TransformTreeNode BaseLinkTreeNode;
         GameObject BaseLinkGO;
         GameObject OdomLinkGO;
@@ -68,7 +71,7 @@ namespace ROS.Publishers
             }
 
             staticTFs.Clear();
-            PopulateStaticFrames(staticTFs);
+            if(!OnlyRelative) PopulateStaticFrames(staticTFs);
         }
 
         static void PopulateChildrenTFList(List<TransformStampedMsg> tfList, TransformTreeNode tfNode)
@@ -143,27 +146,32 @@ namespace ROS.Publishers
             var tfMessageList = new List<TransformStampedMsg>();
 
             
-            // odom -> base_link first
-            var rosOdomPos = ENU.ConvertFromRUF(BaseLinkTreeNode.Transform.localPosition);
-            var rosOdomOri = ENU.ConvertFromRUF(BaseLinkTreeNode.Transform.localRotation);
-            var odomToBaseLinkTFMSG = new TransformMsg
+            if(!OnlyRelative)
             {
-                translation = new Vector3Msg(
-                    rosOdomPos.x,
-                    rosOdomPos.y,
-                    rosOdomPos.z),
-                rotation = new QuaternionMsg(
-                    rosOdomOri.x,
-                    rosOdomOri.y,
-                    rosOdomOri.z,
-                    rosOdomOri.w)
-            };
-            var odomToBaseLink = new TransformStampedMsg(
-                new HeaderMsg(new TimeStamp(Clock.time), "odom"),
-                BaseLinkTreeNode.name,
-                odomToBaseLinkTFMSG);
+                // odom -> base_link first, unless just doing relative, then no odom exists
+                var odomPos = OdomLinkGO.transform.InverseTransformPoint(BaseLinkTreeNode.Transform.position);
+                var odomOri = Quaternion.Inverse(OdomLinkGO.transform.rotation) * BaseLinkTreeNode.Transform.rotation;
+                var rosOdomPos = ENU.ConvertFromRUF(odomPos);
+                var rosOdomOri = ENU.ConvertFromRUF(odomOri);
+                var odomToBaseLinkTFMSG = new TransformMsg
+                {
+                    translation = new Vector3Msg(
+                        rosOdomPos.x,
+                        rosOdomPos.y,
+                        rosOdomPos.z),
+                    rotation = new QuaternionMsg(
+                        rosOdomOri.x,
+                        rosOdomOri.y,
+                        rosOdomOri.z,
+                        rosOdomOri.w)
+                };
+                var odomToBaseLink = new TransformStampedMsg(
+                    new HeaderMsg(new TimeStamp(Clock.time), "odom"),
+                    BaseLinkTreeNode.name,
+                    odomToBaseLinkTFMSG);
 
-            tfMessageList.Add(odomToBaseLink);
+                tfMessageList.Add(odomToBaseLink);                
+            }
 
             // base_link -> children next
             try

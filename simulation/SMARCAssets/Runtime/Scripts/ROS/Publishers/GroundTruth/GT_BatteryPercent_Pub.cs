@@ -7,6 +7,7 @@ using System.Collections.Generic;
 
 namespace ROS.Publishers.GroundTruth
 {
+    [AddComponentMenu("Smarc/ROS/GT_BatteryPercent_Pub")]
     class GT_BatteryPercent_Pub : ROSPublisher<Float32Msg>
     {
         

@@ -8,6 +8,7 @@ using ROS.Core;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkAccelStamped")]
     [RequireComponent(typeof(IMU))]
     public class PsdkAccelStamped : ROSPublisher<AccelStampedMsg>
     {

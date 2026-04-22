@@ -24,6 +24,8 @@ namespace GeoRef
         [Header("Tile Settings")]
         public int TileSizePx = 256;
         public int TileSizeMeters = 50;
+        [Tooltip("Max number of tiles to create. If the number of tiles exceeds this, no tiles will be created and a warning will be logged. Here to keep you from accidentally producing 10 million tiles.")]
+        public int MaxNumTiles = 100;
 
         [Tooltip("Move all tiles north by this amount (in meters) to align satelite images with a reference point")]
         public float TileOffsetNorth = 0f;
@@ -110,27 +112,49 @@ namespace GeoRef
             using UnityWebRequest webRequest = UnityWebRequestTexture.GetTexture(url);
             // Send the request and wait for a response
             yield return webRequest.SendWebRequest();
+            Texture2D texture = null;
 
             if (webRequest.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"Error: {webRequest.error}");
+                Debug.LogError($"Error: {webRequest.error}. Trying again once in a second.");
+                yield return new WaitForSeconds(1);
+                // Try again once
+                using UnityWebRequest webRequestRetry = UnityWebRequestTexture.GetTexture(url);
+                yield return webRequestRetry.SendWebRequest();
+
+                if (webRequestRetry.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogError($"Error again: {webRequestRetry.error}.");
+                }
+                else texture = DownloadHandlerTexture.GetContent(webRequestRetry);
             }
-            else
+            else texture = DownloadHandlerTexture.GetContent(webRequest);
+
+            if (texture != null)
             {
-                Texture2D texture = DownloadHandlerTexture.GetContent(webRequest);
                 // Create a mesh and assign the texture
                 var meshFilter = quadObj.AddComponent<MeshFilter>();
                 meshFilter.mesh = Resources.GetBuiltinResource<Mesh>("Quad.fbx");
 
                 var meshRenderer = quadObj.AddComponent<MeshRenderer>();
-                // This is for play mode! If you want to use this in editor, then you need to _create_ a new material for each
-                // tile, and save it as a new asset, then assign it. Otherwise the instance of the material dangles around and is not saved.
-                // In game mode, this is fine, as the material is created in memory and assigned to the mesh renderer.
-                meshRenderer.material = TileMaterial;
-                meshRenderer.material.mainTexture = texture;
+                // Create a new material instance for this tile
+                Material tileMaterialInstance = new(TileMaterial)
+                {
+                    mainTexture = texture
+                };
+                meshRenderer.material = tileMaterialInstance;
                 meshRenderer.receiveShadows = false;
                 meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
+            else
+            {
+                Debug.LogError($"Failed to load texture for tile {quadObj.name}. Destroying tile.");
+                // Delete the tile GameObject if the request failed
+                // check if edit mode or play mode, use the right destroy method
+                if (Application.isPlaying) Destroy(quadObj);
+                else DestroyImmediate(quadObj);
+            }
+
         }
 
         public void MakeTiles()
@@ -138,9 +162,9 @@ namespace GeoRef
             // Split the area into tiles
             int numTiles = Mathf.CeilToInt(Radius * 2 / TileSizeMeters) + 1;
             Debug.Log($"Number of tiles: {numTiles * numTiles}");
-            if(numTiles*numTiles > 100)
+            if(numTiles*numTiles > MaxNumTiles)
             {
-                Debug.LogWarning("Too many tiles to create. Please reduce the radius or  increase tile size.");
+                Debug.LogWarning($"Too many({numTiles * numTiles}) tiles to create. Please reduce the radius or increase tile size.");
                 return;
             }
 
@@ -171,6 +195,13 @@ namespace GeoRef
 
                     // Create a new GameObject for the tile
                     var tileName = $"Tile_{x}_{z}";
+
+                    // If tile already exist, skip it
+                    if (transform.Find(tileName) != null)
+                    {
+                        Debug.Log($"Tile {tileName} already exists, skipping.");
+                        continue;
+                    }
                     var quadObj = new GameObject(tileName);
                     quadObj.transform.SetParent(transform, false);
                     quadObj.transform.localPosition = new Vector3((float)tileX, 0, (float)tileZ);

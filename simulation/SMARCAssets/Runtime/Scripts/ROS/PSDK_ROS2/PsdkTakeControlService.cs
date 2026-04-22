@@ -6,6 +6,7 @@ using ROS.Core;
 
 namespace M350.PSDK_ROS2
 {
+    [UnityEngine.AddComponentMenu("Smarc/PSDK_ROS/PsdkTakeControlService")]
     public class PsdkTakeControlService : ROSBehaviour
     {
         bool registered = false;
@@ -31,7 +32,7 @@ namespace M350.PSDK_ROS2
                 controller = GetComponentInParent<DJIController>();
             }
             if(controller != null){
-                controller.ControllerType = ControllerType.FLU_Velocity;
+                controller.TakeControl();
                 response.success = true;
                 return response;
             }

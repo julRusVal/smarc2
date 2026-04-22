@@ -73,7 +73,7 @@ namespace SmarcGUI.MissionPlanning
             NewMissionPlanButton.onClick.AddListener(OnNewTST);
             LoadMissionsButton.onClick.AddListener(LoadMissionPlans);
             SaveMissionsButton.onClick.AddListener(SaveMissionPlans);
-            RunMissionButton.onClick.AddListener(() => guiState.SelectedRobotGUI.SendStartTSTCommand(SelectedTSTGUI.tst));
+            RunMissionButton.onClick.AddListener(OnRunMissionButton);
             MissionSignalsDropdown.ClearOptions();
             MissionSignalsDropdown.AddOptions(new List<string>
             {
@@ -83,7 +83,7 @@ namespace SmarcGUI.MissionPlanning
                 WaspSignals.ABORT,
                 SmarcSignals.CANCEL_ABORT
             });
-            MissionSignalButton.onClick.AddListener(() => guiState.SelectedRobotGUI.SendSignalTSTUnitCommand(MissionSignalsDropdown.options[MissionSignalsDropdown.value].text));
+            MissionSignalButton.onClick.AddListener(OnSignalButton);
             AddTaskButton.onClick.AddListener(AddNewTask);
 
             // this finds all task types in the assembly through reflection.
@@ -111,6 +111,22 @@ namespace SmarcGUI.MissionPlanning
             SelectedTSTGUI.OnTaskAdded(new TaskSpec(
                 TaskKebabToCamelCase[TaskTypeDropdown.options[TaskTypeDropdown.value].text], // convert from kebab to camel to match c# class names
                 null));
+        }
+
+        void OnRunMissionButton()
+        {
+            foreach(var robotGUI in guiState.SelectedRobotGUIs)
+            {
+                robotGUI.SendStartTSTCommand(SelectedTSTGUI.tst);
+            }
+        }
+
+        void OnSignalButton()
+        {
+            foreach(var robotGUI in guiState.SelectedRobotGUIs)
+            {
+                robotGUI.SendSignalTSTUnitCommand(MissionSignalsDropdown.options[MissionSignalsDropdown.value].text);
+            }
         }
 
         public Task CreateTask(string taskName)
@@ -141,8 +157,10 @@ namespace SmarcGUI.MissionPlanning
         void LateUpdate()
         {
             var missionInteraction = SelectedTSTGUI != null &&
-                                            guiState.SelectedRobotGUI != null &&
-                                            guiState.SelectedRobotGUI.TSTExecInfoReceived;
+                                     guiState.SelectedRobotGUIs != null &&
+                                     guiState.SelectedRobotGUIs.Count > 0;
+
+            foreach(var robotGUI in guiState.SelectedRobotGUIs) missionInteraction = missionInteraction && robotGUI.TSTExecInfoReceived;
                                             
             RunMissionButton.interactable = missionInteraction;
             MissionSignalsDropdown.interactable = missionInteraction;

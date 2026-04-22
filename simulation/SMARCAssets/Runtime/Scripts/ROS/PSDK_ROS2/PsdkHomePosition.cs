@@ -7,6 +7,7 @@ using ROS.Core;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkHomePosition")]
     public class PsdkHomePosition : ROSPublisher<NavSatFixMsg>
     {
         GlobalReferencePoint globalReferencePoint;

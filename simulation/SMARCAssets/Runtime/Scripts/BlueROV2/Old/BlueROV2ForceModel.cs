@@ -403,59 +403,9 @@ namespace DefaultNamespace
                 inputForce = Vector3.zero;
                 inputTorque = Vector3.zero;
 
-                // The Input class is deprecated in the new input system, thus the following is commented out.
-                // Below are the old keyboard controls for testing without ROS/MPC
+                // The Input class is deprecated in the new input system,
                 // If you want to use keyboard controls, use the new Input System package from Unity and set it up accordingly.
                 // Keyboard controls
-                // if (Input.GetKey(KeyCode.W))
-                // {
-                //     inputForce[2] += 86;
-                // }
-
-                // if (Input.GetKey(KeyCode.A))
-                // {
-                //     inputForce[0] -= 85;
-                // }
-
-                // if (Input.GetKey(KeyCode.S))
-                // {
-                //     inputForce[2] -= 85;
-                // }
-
-                // if (Input.GetKey(KeyCode.D))
-                // {
-                //     inputForce[0] += 85;
-                // }
-
-                // if (Input.GetKey(KeyCode.Space))
-                // {
-                //     inputForce[1] += 122;
-                // }
-
-                // if (Input.GetKey(KeyCode.LeftShift))
-                // {
-                //     inputForce[1] -= 122;
-                // }
-
-                // if (Input.GetKey(KeyCode.Q))
-                // {
-                //     inputTorque[1] -= 14;
-                // }
-
-                // if (Input.GetKey(KeyCode.E))
-                // {
-                //     inputTorque[1] += 14;
-                // }
-
-                // if (Input.GetKey(KeyCode.X))
-                // {
-                //     inputTorque[0] += 14;
-                // }
-
-                // if (Input.GetKey(KeyCode.C))
-                // {
-                //     inputTorque[2] += 14;
-                // }
             }
 
             // inputForce = Vector3.zero;

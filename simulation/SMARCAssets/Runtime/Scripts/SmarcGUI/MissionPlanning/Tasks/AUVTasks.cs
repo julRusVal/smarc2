@@ -73,7 +73,6 @@ namespace SmarcGUI.MissionPlanning.Tasks
             Params.Add("target_heading", 0);
             Params.Add("min_altitude", 0);
             Params.Add("rpm", 0);
-            Params.Add("timeout", 0);
         }
     }
 
@@ -87,7 +86,6 @@ namespace SmarcGUI.MissionPlanning.Tasks
             Params.Add("target_heading", 0);
             Params.Add("max_depth", 0);
             Params.Add("rpm", 0);
-            Params.Add("timeout", 0);
         }
     }
 
@@ -97,7 +95,7 @@ namespace SmarcGUI.MissionPlanning.Tasks
         {
             Name = "loiter";
             Description = "Loiter at current position";
-            Params.Add("timeout", 0);
+            Params.Add("duration", 0);
         }
     }
 

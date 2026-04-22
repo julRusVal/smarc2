@@ -29,6 +29,11 @@ namespace SmarcGUI.Connections
             ComUuid = response.ComUuid;
             ResponseTo = response.ResponseTo;
         }
+
+        public override string ToString()
+        {
+            return $"Response from agent: {Response}";
+        }
     }
 
     

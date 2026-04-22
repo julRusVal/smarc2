@@ -8,6 +8,7 @@ using ROS.Core;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/CameraInfo_Pub")]
     [RequireComponent(typeof(CameraImageSensor))]
     [RequireComponent(typeof(Camera))]
     class CameraInfo_Pub: ROSSensorPublisher<CameraInfoMsg, CameraImageSensor>

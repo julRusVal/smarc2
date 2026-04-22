@@ -8,6 +8,7 @@ using Unity.Robotics.ROSTCPConnector.ROSGeometry;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkFusedPos")]
     public class PsdkFusedPos : ROSPublisher<PositionFusedMsg>
     {
         Transform base_link;

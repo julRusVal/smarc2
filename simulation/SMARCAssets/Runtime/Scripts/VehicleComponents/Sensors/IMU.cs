@@ -3,6 +3,7 @@ using UnityEngine;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/IMU")]
     public class IMU : Sensor
     {
         // Mostly copied from https://github.com/MARUSimulator/marus-core/blob/21c003a384335777b9d9fb6805eeab1cdb93b2f0/Scripts/Sensors/Primitive/ImuSensor.cs
@@ -34,7 +35,7 @@ namespace VehicleComponents.Sensors
             }
 
             // Use MixedBody to handle both Rigidbody and ArticulationBody
-            localVelocity = mixedBody.transform.InverseTransformVector(mixedBody.velocity);
+            localVelocity = mixedBody.localVelocity;
 
             if (deltaTime > 0)
             {

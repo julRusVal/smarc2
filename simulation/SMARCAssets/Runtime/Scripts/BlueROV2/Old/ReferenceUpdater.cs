@@ -33,23 +33,8 @@ public class ReferenceUpdater : MonoBehaviour
         // Reset velocity
         velocity = Vector3.zero;
 
-        // The Input class is deprecated in the new input system, thus the following is commented out.
-        // Below are the old keyboard controls for testing without ROS/MPC
+        // The Input class is deprecated in the new input system
         // If you want to use keyboard controls, use the new Input System package from Unity and set it up accordingly.
         // WASD controls for movement in the X and Z plane
-        // if (Input.GetKey(KeyCode.W)) // Forward (increase Z)
-        //     velocity.z = movementSpeed;
-        // if (Input.GetKey(KeyCode.S)) // Backward (decrease Z)
-        //     velocity.z = -movementSpeed;
-        // if (Input.GetKey(KeyCode.A)) // Left (decrease X)
-        //     velocity.x = -movementSpeed;
-        // if (Input.GetKey(KeyCode.D)) // Right (increase X)
-        //     velocity.x = movementSpeed;
-
-        // // Space and Shift for moving up and down
-        // if (Input.GetKey(KeyCode.Space)) // Up
-        //     velocity.y = verticalSpeed;
-        // if (Input.GetKey(KeyCode.LeftShift)) // Down
-        //     velocity.y = -verticalSpeed;
     }
 }

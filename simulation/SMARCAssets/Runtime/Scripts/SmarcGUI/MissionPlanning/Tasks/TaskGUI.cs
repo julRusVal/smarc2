@@ -72,14 +72,22 @@ namespace SmarcGUI.MissionPlanning.Tasks
 
             WorldMarkersCollection = GameObject.Find(WorldMarkersCollectionName).transform;
 
-            OnRobotSelectionChange(guiState.SelectedRobotGUI);
+            OnRobotSelectionChange(guiState.SelectedRobotGUIs);
+        }
+
+        void Start()
+        {
+            OnRobotSelectionChange(guiState.SelectedRobotGUIs);
         }
         
         void OnRunTask()
         {
-            var robotgui = guiState.SelectedRobotGUI;
-            if(robotgui == null) return;
-            robotgui.SendStartTaskCommand(task);
+            var robotguis = guiState.SelectedRobotGUIs;
+            if(robotguis == null || robotguis.Count == 0) return;
+            foreach(var robotgui in robotguis)
+            {
+                robotgui.SendStartTaskCommand(task);
+            }
         }
 
         public void SetDesc(string desc)
@@ -207,37 +215,62 @@ namespace SmarcGUI.MissionPlanning.Tasks
             foreach(var p in pointmarkers) p.Highlight(true);
         }
 
-        public void OnRobotSelectionChange(RobotGUI SelectedRobotGUI)
+        public void OnRobotSelectionChange(List<RobotGUI> SelectedRobotGUIs)
         {
             if (task == null) return;
-            RunButton.interactable = SelectedRobotGUI != null;
-            if(SelectedRobotGUI == null || SelectedRobotGUI.TasksAvailableNames == null)
+            RunButton.interactable = SelectedRobotGUIs != null && SelectedRobotGUIs.Count > 0;
+            if (SelectedRobotGUIs.Count == 0)
             {
                 WarningRT.gameObject.SetActive(false);
                 RunButtonImage.color = Color.gray;
-                RunButtonText.text = SelectedRobotGUI == null ? "NoRobot" : "NoTasks";
+                RunButtonText.text = "NoRobot";
+                RunButton.interactable = false;
             }
-            else
+            if (SelectedRobotGUIs.Count == 1)
             {
-                // warning highlight if the selected robot does not have this task available
-                if(SelectedRobotGUI.InfoSource == InfoSource.SIM) WarningRT.gameObject.SetActive(false);
-                else if (!SelectedRobotGUI.TasksAvailableNames.Contains(task.Name)) WarningRT.gameObject.SetActive(true);
-
-                // make the RUN button green if it is already running this task
-                // use the task uuid to check this, since many tasks of the same type can be running
-                // 
-                if(SelectedRobotGUI.TasksExecutingUuids.Contains(task.TaskUuid))
+                RobotGUI selectedRobotGUI = SelectedRobotGUIs[0];
+                if(selectedRobotGUI == null || selectedRobotGUI.TasksAvailableNames == null)
                 {
-                    RunButtonImage.color = Color.green;
-                    RunButton.interactable = false;
-                    RunButtonText.text = "Running";
+                    WarningRT.gameObject.SetActive(false);
+                    RunButtonImage.color = Color.gray;
+                    RunButtonText.text = SelectedRobotGUIs == null ? "NoRobot" : "NoTasks";
                 }
                 else
                 {
-                    RunButtonImage.color = RunButtonOriginalColor;
-                    RunButtonText.text = "Run";
-                }
-            } 
+                    // warning highlight if the selected robot does not have this task available
+                    if(selectedRobotGUI.InfoSource == InfoSource.SIM) WarningRT.gameObject.SetActive(false);
+                    else if (!selectedRobotGUI.TasksAvailableNames.Contains(task.Name))
+                    {
+                        // robot doesnt have this available...
+                        WarningRT.gameObject.SetActive(true);
+                        RunButtonText.text = "Cannot";
+                        RunButton.interactable = false;
+                    }
+                    else
+                    {
+                        // make the RUN button green if it is already running this task
+                        // use the task uuid to check this, since many tasks of the same type can be running
+                        if(selectedRobotGUI.TasksExecutingUuids.Contains(task.TaskUuid))
+                        {
+                            RunButtonImage.color = Color.green;
+                            RunButton.interactable = false;
+                            RunButtonText.text = "Running";
+                        }
+                        else
+                        {
+                            RunButtonImage.color = RunButtonOriginalColor;
+                            RunButtonText.text = "Run";
+                        }
+                    }
+
+                } 
+            }
+            if (SelectedRobotGUIs.Count > 1)
+            {
+                WarningRT.gameObject.SetActive(false);
+                RunButtonImage.color = RunButtonOriginalColor;
+                RunButtonText.text = "RunMany";
+            }
         }
 
 

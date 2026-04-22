@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/CameraImage")]
     [RequireComponent(typeof(Camera))]
     public class CameraImage: Sensor
     {

@@ -8,6 +8,7 @@ using Force;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkGpsPosition")]
     public class PsdkGpsPosition : ROSPublisher<NavSatFixMsg>
     {
         GlobalReferencePoint globalReferencePoint;

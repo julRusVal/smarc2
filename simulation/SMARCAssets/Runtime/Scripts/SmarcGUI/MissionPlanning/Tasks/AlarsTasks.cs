@@ -3,13 +3,48 @@ using SmarcGUI.MissionPlanning.Params;
 namespace SmarcGUI.MissionPlanning.Tasks
 {
 
+    public class AlarsTakeOff : Task
+    {
+        public override void SetParams()
+        {
+            Name = "alars-takeoff";
+            Description = "Take off here.";
+        }
+    }
+
+    public class AlarsLand : Task
+    {
+        public override void SetParams()
+        {
+            Name = "alars-land";
+            Description = "Land here.";
+        }
+    }
+
+    public class AlarsTakeControl : Task
+    {
+        public override void SetParams()
+        {
+            Name = "alars-take-control";
+            Description = "Take control of the drone.";
+        }
+    }
+
+    public class AlarsReleaseControl : Task
+    {
+        public override void SetParams()
+        {
+            Name = "alars-release-control";
+            Description = "Release control of the drone.";
+        }
+    }
+
     public class AlarsBT : Task
     {
         public override void SetParams()
         {
             Name = "alars-bt";
             Description = "Run the entire ALARS system";
-            Params.Add("initial_travel_alt", 25.0f);
             Params.Add("search_position", new GeoPoint());
             Params.Add("delivery_position", new GeoPoint());
             Params.Add("forward_distance", 2.0f);

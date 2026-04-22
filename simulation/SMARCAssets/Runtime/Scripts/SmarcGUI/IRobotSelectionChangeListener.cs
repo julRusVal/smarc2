@@ -1,9 +1,9 @@
-using UnityEngine;
+using System.Collections.Generic;
 
 namespace SmarcGUI
 {
     public interface IRobotSelectionChangeListener
     {
-        public void OnRobotSelectionChange(RobotGUI SelectedRobotGUI);
+        public void OnRobotSelectionChange(List<RobotGUI> SelectedRobotGUIs);
     }
 }

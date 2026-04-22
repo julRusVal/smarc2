@@ -37,14 +37,14 @@ namespace SmarcGUI.Connections
     {
         [Header("Connection Settings")]
         [Tooltip("If true, the default settings below will override any saved settings file.")]
-        public bool OverrideSettingsFile = true;
-        public string DefaultServerAddress = "20.240.40.232";
-        public int DefaultPort = 1884;
+        public bool OverrideSettingsFile = false;
+        public string DefaultServerAddress = "localhost";
+        public int DefaultPort = 1889;
         public bool DefaultConnectOnStart = false;
         public string DefaultUsername = "noname";
         public string DefaultPassword = "nopass";
-        public string DefaultContext = "tuper";
-        public bool DefaultSubToReal = false;
+        public string DefaultContext = "smarcsim";
+        public bool DefaultSubToReal = true;
         public bool DefaultSubToSim = true;
         public bool DefaultTLS = false;
 
@@ -112,9 +112,9 @@ namespace SmarcGUI.Connections
                 // Default settings if no settings file exists
                 var settingsDict = new Dictionary<string, string>
                 {
-                    { "BrokerAddress", "20.240.40.232" },
-                    { "BrokerPort", "1884" },
-                    { "Context", "tuper" },
+                    { "BrokerAddress", "localhost" },
+                    { "BrokerPort", "1889" },
+                    { "Context", "smarcsim" },
                     { "SubToReal", "true" },
                     { "SubToSim", "true" },
                     { "TLS", "false" },
@@ -126,9 +126,9 @@ namespace SmarcGUI.Connections
                 var settingsYaml = serializer.Serialize(settingsDict);
                 File.WriteAllText(settingsFile, settingsYaml);
                 guiState.Log($"No MQTT settings file found. Created default settings file at {settingsFile}");
-                ServerAddressInput.text = "20.240.40.232";
-                PortInput.text = "1884";
-                ContextInput.text = "tuper";
+                ServerAddressInput.text = "localhost";
+                PortInput.text = "1889";
+                ContextInput.text = "smarcsim";
                 SubToRealToggle.isOn = true;
                 SubToSimToggle.isOn = true;
                 TLSToggle.isOn = false;
@@ -457,12 +457,13 @@ namespace SmarcGUI.Connections
                                     robotgui.OnPongResponseReceived(pong);
                                     break;
                                 default:
-                                    guiState.Log($"{topic}\n{payload}");
+                                    guiState.Log($"{topic}\n{response.ToString()}");
                                     break;
                             }
                             break;  
                         case "feedback":
-                            guiState.Log($"{topic}\n{payload}");
+                            BaseFeedback feedback = new(payload);
+                            guiState.Log($"{topic}\n{feedback.ToString()}");
                             break;
                         default:
                             guiState.Log($"{topic}\n{payload}");

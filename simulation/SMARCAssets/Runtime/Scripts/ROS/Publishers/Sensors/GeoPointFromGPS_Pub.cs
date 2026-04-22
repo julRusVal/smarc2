@@ -7,6 +7,7 @@ using ROS.Core;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/GeoPointFromGPS_Pub")]
     [RequireComponent(typeof(SensorGPS))]
     class GeoPointFromGPS_Pub: ROSSensorPublisher<GeoPointMsg, SensorGPS>
     { 

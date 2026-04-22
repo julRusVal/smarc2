@@ -4,6 +4,7 @@ using Force;
 
 namespace VehicleComponents
 {
+    [AddComponentMenu("Smarc/VehicleComponents/LinkAttachment")]
     public class LinkAttachment : MonoBehaviour
     {
         [Header("Link attachment")] 

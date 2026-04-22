@@ -29,7 +29,7 @@ namespace VehicleComponents.Acoustics
         }
     }
 
-
+    [AddComponentMenu("Smarc/Acoustics/Transceiver")]
     [RequireComponent(typeof(MeshFilter))]
     public class Transceiver : MonoBehaviour, ISoundVelocityUser, IROSPublishable
     {   

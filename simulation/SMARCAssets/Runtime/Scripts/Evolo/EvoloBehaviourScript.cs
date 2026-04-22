@@ -55,7 +55,7 @@ namespace Evolo
         void Start()
         {
             ros = ROSConnection.GetOrCreateInstance();
-            ros.Subscribe<TwistMsg>(subscribeTopic, UpdateBoatControl);
+            ros.Subscribe<TwistStampedMsg>(subscribeTopic, UpdateBoatControl);
 
             forwardAction = InputSystem.actions.FindAction("Robot/Forward");
             strafeAction = InputSystem.actions.FindAction("Robot/Strafe");
@@ -74,19 +74,19 @@ namespace Evolo
             }
             if (privateSubscribeTopic!=subscribeTopic){ //alternate between topics to control evolo
                 ros.Unsubscribe(privateSubscribeTopic);
-                ros.Subscribe<TwistMsg>(subscribeTopic, UpdateBoatControl);
+                ros.Subscribe<TwistStampedMsg>(subscribeTopic, UpdateBoatControl);
                 privateSubscribeTopic=subscribeTopic;
                 Debug.Log($"Changed topic on which evolo is controlled. Now listening to topic:  {subscribeTopic }");
 
             }
         }
 
-        void UpdateBoatControl(TwistMsg msg)
+        void UpdateBoatControl(TwistStampedMsg msg)
         {
             if (useROSCommands) // Only update if ROS mode is enabled
             {
-                float difference_speed= (float)msg.linear.x - linearSpeedGoalKt;
-                speed_roll_limits((float)msg.linear.x,difference_speed,(float)msg.angular.z);
+                float difference_speed= (float)msg.twist.linear.x - linearSpeedGoalKt;
+                speed_roll_limits((float)msg.twist.linear.x,difference_speed,(float)msg.twist.angular.z);
             }
         }
 

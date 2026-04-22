@@ -3,10 +3,12 @@ using ROS.Core;
 using RosMessageTypes.Geometry;
 using Unity.Robotics.Core;
 using Unity.Robotics.ROSTCPConnector.ROSGeometry;
+using UnityEngine;
 
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkGpsVelocity")]
     public class PsdkGpsVelocity : ROSPublisher<TwistStampedMsg>
     {
         MixedBody body;

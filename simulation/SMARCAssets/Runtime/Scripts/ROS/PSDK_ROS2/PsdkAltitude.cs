@@ -1,9 +1,11 @@
 using Force;
 using ROS.Core;
 using RosMessageTypes.Std;
+using UnityEngine;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkAltitude")]
     public class PsdkAltitude : ROSPublisher<Float32Msg>
     {
         MixedBody body;

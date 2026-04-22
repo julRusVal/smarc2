@@ -6,6 +6,7 @@ using ROS.Core;
 
 namespace M350.PSDK_ROS2
 {
+    [UnityEngine.AddComponentMenu("Smarc/PSDK_ROS/PsdkReleaseControlService")]
     public class PsdkReleaseControlService : ROSBehaviour
     {
 
@@ -20,20 +21,19 @@ namespace M350.PSDK_ROS2
             }
             if (!registered)
             {
-                rosCon.ImplementService<TriggerRequest, TriggerResponse>(topic, _take_control_callback);
+                rosCon.ImplementService<TriggerRequest, TriggerResponse>(topic, _release_control_callback);
                 registered = true;
             }
         }
 
-        private TriggerResponse _take_control_callback(TriggerRequest request){
+        private TriggerResponse _release_control_callback(TriggerRequest request){
             TriggerResponse response = new();
 
             if(controller == null){
                 controller = GetComponentInParent<DJIController>();
             }
             if(controller != null){
-                controller.TargetAlt = controller.Position.y;
-                controller.ControllerType = ControllerType.FLU_Attitude;
+                controller.ReleaseControl();
                 response.success = true;
                 return response;
             }

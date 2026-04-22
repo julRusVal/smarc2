@@ -1259,8 +1259,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   DrawRays: 1
-  RayMaterial: {fileID: -6478536213147159724, guid: 982c4d158e289562aa45be9f01a615a1,
-    type: 3}
+  RayMaterial: {fileID: 10306, guid: 0000000000000000f000000000000000, type: 0}
   RayThickness: 0.05
   DrawHits: 1
   DrawEveryNthFrame: 10

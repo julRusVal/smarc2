@@ -3,6 +3,7 @@ using DefaultNamespace.Water; // WaterQueryModel
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/DepthPressure")]
     public class DepthPressure: Sensor
     {
         [Header("Depth-Pressure")]

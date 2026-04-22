@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Force;
 using MathNet.Numerics.LinearAlgebra;
 using MathNet.Numerics.LinearAlgebra.Double;
 using UnityEngine;
@@ -315,23 +316,53 @@ namespace DefaultNamespace
             return path;
         }
 
-        public static Vector2 WorldToCanvasPosition(Canvas canvas, Camera worldCamera, Vector3 worldPosition)
-        // https://discussions.unity.com/t/how-to-convert-from-world-space-to-canvas-space/117981/18
+        /// <summary>
+        /// Converts a world position to a local position in the given canvas' RectTransform space.
+        /// Result is suitable for setting RectTransform.anchoredPosition (when using the same reference rect).
+        /// </summary>
+        public static Vector2 WorldToCanvasPosition(Canvas targetCanvas, Camera worldCamera, Vector3 worldPosition)
         {
-            //Vector position (percentage from 0 to 1) considering camera size.
-            //For example (0,0) is lower left, middle is (0.5,0.5)
-            Vector2 viewportPoint = worldCamera.WorldToViewportPoint(worldPosition);
+            if (!targetCanvas) return Vector2.zero;
 
-            var rootCanvasTransform = (canvas.isRootCanvas ? canvas.transform : canvas.rootCanvas.transform) as RectTransform;
-            var rootCanvasSize = rootCanvasTransform!.rect.size;
-            //Calculate position considering our percentage, using our canvas size
-            //So if canvas size is (1100,500), and percentage is (0.5,0.5), current value will be (550,250)
-            var rootCoord = (viewportPoint - rootCanvasTransform.pivot) * rootCanvasSize;
-            if (canvas.isRootCanvas)
-                return rootCoord;
+            // 1) World -> Screen pixels (this uses the CURRENT game view & camera pixel rect)
+            Vector3 sp = worldCamera.WorldToScreenPoint(worldPosition);
 
-            var rootToWorldPos = rootCanvasTransform.TransformPoint(rootCoord);
-            return canvas.transform.InverseTransformPoint(rootToWorldPos);
+            // Behind camera: choose your behavior (hide/clamp/etc.)
+            if (sp.z < 0f)
+                return new Vector2(float.NaN, float.NaN);
+
+            // 2) Screen -> Local point in the target canvas' rect space
+            // For ScreenSpaceOverlay, pass null. Otherwise pass the canvas' worldCamera.
+            Camera uiCam = (targetCanvas.renderMode == RenderMode.ScreenSpaceOverlay) ? null : targetCanvas.worldCamera;
+
+            RectTransform canvasRect = targetCanvas.transform as RectTransform;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                sp,
+                uiCam,
+                out Vector2 localPoint
+            );
+
+            return localPoint;
+        }
+
+        /// <summary>
+        /// Convenience: set a RectTransform's anchoredPosition from a world point.
+        /// Works best when the rect is under the same canvas you pass in.
+        /// </summary>
+        public static void SetAnchoredFromWorld(RectTransform rect, Canvas canvas, Camera worldCamera, Vector3 worldPosition)
+        {
+            Vector2 local = WorldToCanvasPosition(canvas, worldCamera, worldPosition);
+
+            // If you returned NaN for behind-camera, you can hide here.
+            if (float.IsNaN(local.x))
+            {
+                rect.gameObject.SetActive(false);
+                return;
+            }
+
+            rect.gameObject.SetActive(true);
+            rect.anchoredPosition = local;
         }
 
         /// <summary>
@@ -341,31 +372,8 @@ namespace DefaultNamespace
         /// </summary>
         public static Vector3 GetCenterOfMass(ArticulationBody ab, bool includeChildren = true)
         {
-            if (!includeChildren)
-            {
-                return ab.transform.position + ab.centerOfMass;
-            }
-
-            var com = (ab.transform.position + ab.centerOfMass) * ab.mass;
-            var totalMass = ab.mass;
-            var abs = ab.GetComponentsInChildren<ArticulationBody>();
-            foreach (var childAb in abs)
-            {
-                if (childAb == ab) continue; // Skip the root ArticulationBody
-                com += (childAb.transform.position + childAb.centerOfMass) * childAb.mass;
-                totalMass += childAb.mass;
-            }
-
-            if (totalMass > 0)
-            {
-                com /= totalMass;
-                return com;
-            }
-            else
-            {
-                Debug.LogWarning("Total mass is zero, cannot draw center of mass.");
-                return Vector3.zero; // Return zero vector if total mass is zero
-            }
+            MixedBody b = new(ab, null);
+            return b.GetTotalConnectedCenterOfMass(includeChildren);
         }
 
         

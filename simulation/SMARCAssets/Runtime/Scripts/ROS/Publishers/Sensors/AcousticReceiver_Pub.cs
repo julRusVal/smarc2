@@ -11,6 +11,7 @@ using ROS.Core;
 namespace ROS.Publishers
 {
 
+    [AddComponentMenu("Smarc/ROS/AcousticReceiver_Pub")]
     [RequireComponent(typeof(TX))]
     public class AcousticReceiver_Pub : ROSSensorPublisher<StringStampedMsg, TX>
     {

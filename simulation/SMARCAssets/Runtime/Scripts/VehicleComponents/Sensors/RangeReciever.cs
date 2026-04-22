@@ -4,6 +4,7 @@ using NormalDistribution  = DefaultNamespace.NormalDistribution;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/RangeReciever")]
     public class RangeReciever : Sensor
     {
         [Header("Range-Reciever")]
