@@ -6,6 +6,7 @@ using UnityEngine;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkLandingService")]
     public class PsdkLandingService : ROSBehaviour
     {
         bool registered = false;

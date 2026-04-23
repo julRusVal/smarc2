@@ -10,6 +10,8 @@ namespace VehicleComponents.Actuators
         Horizontal
     }
 
+
+    [AddComponentMenu("Smarc/Actuator/ControlSurface")]
     [RequireComponent(typeof(LinkAttachment))]
     public class ControlSurface : MonoBehaviour
     {

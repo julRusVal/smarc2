@@ -6,6 +6,7 @@ using Force;
 
 namespace ROS.Publishers.GroundTruth
 {
+    [AddComponentMenu("Smarc/ROS/GT_Course_Pub")]
     class GT_Course_Pub : ROSPublisher<Float32Msg>
     {
         MixedBody body;

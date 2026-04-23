@@ -9,6 +9,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32
 from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 
 from smarc_msgs.msg import Topics as SmarcTopics
 from smarc_msgs.msg import FloatStamped
@@ -38,44 +39,44 @@ class Captain(Node):
 
         self.declare_node_parameters()
 
-        self.update_rate = float(self.get_parameter("update_rate").value)
+        self.update_rate = self.get_parameter("update_rate").get_parameter_value().double_value
         self.logger.info(f"Update rate: {self.update_rate} Hz")
-        self.robot_name = self.get_parameter("robot_name").value
-        self.yaw_threshold = float(self.get_parameter("yaw_threshold").value)
+
+        self.robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
+        self.yaw_threshold = self.get_parameter("yaw_threshold").get_parameter_value().double_value
         self.move_on_place_flag = True
 
         
         self.yaw_pid = PID(
-            kP=float(self.get_parameter("yaw_p_gain").value),
-            kI=float(self.get_parameter("yaw_i_gain").value),
-            kD=float(self.get_parameter("yaw_d_gain").value),
-            max_output=float(self.get_parameter("yaw_output_limit").value)
+            kP = self.get_parameter("yaw_p_gain").get_parameter_value().double_value,
+            kI = self.get_parameter("yaw_i_gain").get_parameter_value().double_value,
+            kD = self.get_parameter("yaw_d_gain").get_parameter_value().double_value,
+            max_output = self.get_parameter("yaw_output_limit").get_parameter_value().double_value
         )
         
         self.yawrate_pid = PID(
-            kP=float(self.get_parameter("yawrate_p_gain").value),
-            kI=float(self.get_parameter("yawrate_i_gain").value),
-            kD=float(self.get_parameter("yawrate_d_gain").value),
-            max_output=float(self.get_parameter("yawrate_output_limit").value)
+            kP = self.get_parameter("yawrate_p_gain").get_parameter_value().double_value,
+            kI = self.get_parameter("yawrate_i_gain").get_parameter_value().double_value,
+            kD = self.get_parameter("yawrate_d_gain").get_parameter_value().double_value,
+            max_output = self.get_parameter("yawrate_output_limit").get_parameter_value().double_value
         )
         
         self.velocity_pid = PID(
-            kP=float(self.get_parameter("velocity_p_gain").value),
-            kI=float(self.get_parameter("velocity_i_gain").value),
-            kD=float(self.get_parameter("velocity_d_gain").value),
-            max_output=float(self.get_parameter("velocity_output_limit").value)
+            kP = self.get_parameter("velocity_p_gain").get_parameter_value().double_value,
+            kI = self.get_parameter("velocity_i_gain").get_parameter_value().double_value,
+            kD = self.get_parameter("velocity_d_gain").get_parameter_value().double_value,
+            max_output = self.get_parameter("velocity_output_limit").get_parameter_value().double_value
         )
         
         self.logger.info("Initialized 3 PID controllers with configurable gains")
 
+        self.rpm_deadband = self.get_parameter("rpm_deadband").get_parameter_value().double_value
+        self.thruster_limit = self.get_parameter("thruster_limit").get_parameter_value().double_value
+
+        self.turn_in_place_min_rpm = self.get_parameter("turn_in_place_min_rpm").get_parameter_value().double_value
+        self.turn_in_place_gain = self.get_parameter("turn_in_place_gain").get_parameter_value().double_value
         
-        self.rpm_deadband = float(self.get_parameter("rpm_deadband").value)
-        self.thruster_limit = float(self.get_parameter("thruster_limit").value)
-        
-        self.turn_in_place_min_rpm = float(self.get_parameter("turn_in_place_min_rpm").value)
-        self.turn_in_place_gain = float(self.get_parameter("turn_in_place_gain").value)
-        
-        self.max_delta_rpm = float(self.get_parameter("max_delta_rpm").value)
+        self.max_delta_rpm = self.get_parameter("max_delta_rpm").get_parameter_value().double_value
         self.last_thruster_port_cmd = 0.0
         self.last_thruster_strb_cmd = 0.0
                 
@@ -128,31 +129,34 @@ class Captain(Node):
         return self.get_clock().now().nanoseconds * 1e-9
 
     def declare_node_parameters(self):
-        """Declare all configurable parameters for PIDs and mixer"""
-        self.declare_parameter("robot_name", "floatsam_usv")
-        self.declare_parameter("update_rate", 20.0)
-        
-        self.declare_parameter("yaw_p_gain", 0.15)
-        self.declare_parameter("yaw_i_gain", 0.0)
-        self.declare_parameter("yaw_d_gain", 0.0)
-        self.declare_parameter("yaw_output_limit", 0.1)  # rad/s
-        self.declare_parameter("yaw_threshold", 0.5)
-        
-        self.declare_parameter("yawrate_p_gain", 20.0)
-        self.declare_parameter("yawrate_i_gain", 0.0)
-        self.declare_parameter("yawrate_d_gain", 0.0)
-        self.declare_parameter("yawrate_output_limit", 800.0)  # RPM
-        
-        self.declare_parameter("velocity_p_gain", 500.0)
-        self.declare_parameter("velocity_i_gain", 10.0)
-        self.declare_parameter("velocity_d_gain", 0.0)
-        self.declare_parameter("velocity_output_limit", 800.0)  # RPM
-        
-        self.declare_parameter("rpm_deadband", 50.0)  # RPM
-        self.declare_parameter("thruster_limit", 1000.0)  # RPM
-        self.declare_parameter("max_delta_rpm", 200.0)  # RPM per control cycle
-        self.declare_parameter("turn_in_place_min_rpm", 100.0)  # RPM, minimum to overcome stiction
-        self.declare_parameter("turn_in_place_gain", 10.0)  # RPM per radian of heading error
+        """Declare all configurable parameters for PIDs and mixer."""
+        double_desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE)
+        string_desc = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
+
+        self.declare_parameter("robot_name", "floatsam_usv", string_desc)
+        self.declare_parameter("update_rate", 20.0, double_desc)
+
+        self.declare_parameter("yaw_p_gain", 0.15, double_desc)
+        self.declare_parameter("yaw_i_gain", 0.0, double_desc)
+        self.declare_parameter("yaw_d_gain", 0.0, double_desc)
+        self.declare_parameter("yaw_output_limit", 0.1, double_desc)
+        self.declare_parameter("yaw_threshold", 0.5, double_desc)
+
+        self.declare_parameter("yawrate_p_gain", 20.0, double_desc)
+        self.declare_parameter("yawrate_i_gain", 0.0, double_desc)
+        self.declare_parameter("yawrate_d_gain", 0.0, double_desc)
+        self.declare_parameter("yawrate_output_limit", 800.0, double_desc) # Default added
+
+        self.declare_parameter("velocity_p_gain", 500.0, double_desc)
+        self.declare_parameter("velocity_i_gain", 10.0, double_desc)
+        self.declare_parameter("velocity_d_gain", 0.0, double_desc)
+        self.declare_parameter("velocity_output_limit", 800.0, double_desc) # Default added
+
+        self.declare_parameter("rpm_deadband", 50.0, double_desc)
+        self.declare_parameter("thruster_limit", 1000.0, double_desc)
+        self.declare_parameter("max_delta_rpm", 200.0, double_desc)
+        self.declare_parameter("turn_in_place_min_rpm", 100.0, double_desc)
+        self.declare_parameter("turn_in_place_gain", 10.0, double_desc)
 
     # Callbacks: Sensor measurements
     

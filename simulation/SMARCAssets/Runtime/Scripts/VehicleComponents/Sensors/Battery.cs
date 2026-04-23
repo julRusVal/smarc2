@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/Battery")]
     public class Battery: Sensor
     {
         [Header("Battery")]

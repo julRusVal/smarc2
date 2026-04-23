@@ -9,6 +9,7 @@ public enum GizmoType
     CenterOfProps
 }
 
+[AddComponentMenu("Smarc/Utils/SimpleGizmo")]
 public class SimpleGizmo : MonoBehaviour
 {
     [Header("Gizmo Type")]

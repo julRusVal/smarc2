@@ -8,6 +8,7 @@ using VehicleComponents.Sensors;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkAngularRate")]
     [RequireComponent(typeof(IMU))]
     public class PsdkAngularRate : ROSPublisher<Vector3StampedMsg>
     {

@@ -4,7 +4,6 @@ using Unity.Robotics.Core;
 
 namespace VehicleComponents.Sensors
 {
-
     public class Sensor: LinkAttachment, IROSPublishable
     {
         [Header("Sensor")]

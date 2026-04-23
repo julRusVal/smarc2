@@ -7,6 +7,7 @@ using ROS.Core;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/PercentageFeedback_Pub")]
     [RequireComponent(typeof(IPercentageActuator))]
     public class PercentageFeedback_Pub: ROSSensorPublisher<Float32Msg, IPercentageActuator>
     {

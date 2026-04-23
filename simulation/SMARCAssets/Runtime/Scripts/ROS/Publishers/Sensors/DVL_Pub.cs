@@ -9,6 +9,7 @@ using ROS.Core;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/DVL_Pub")]
     [RequireComponent(typeof(SensorDVL))]
     class DVL_Pub: ROSSensorPublisher<DVLMsg, SensorDVL>
     { 

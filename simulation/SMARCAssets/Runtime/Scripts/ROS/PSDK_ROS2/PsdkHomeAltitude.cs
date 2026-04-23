@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkHomeAltitude")]
     public class PsdkHomeAltitude : ROSPublisher<Float32Msg>
     {
         protected override void InitPublisher()

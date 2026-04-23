@@ -38,6 +38,11 @@ namespace ROS.Publishers
                 // If game object has a URDFLink attached, it's a link in the transform tree
                 if (childGO.TryGetComponent(out UrdfLink _))
                 {
+                    // Unless it has its own ROSTranformTreePublisher. Then we stop here and let that publisher handle the subtree
+                    // This allows for partial publishing of transform trees, which is useful for modular robots where each module may have its own publisher
+                    // or the TF is published by a driver on a real robot, and we dont want to run the driver for sim, but still want the TF that the driver
+                    // _would_ publish.
+                    if (childGO.TryGetComponent(out ROSTransformTreePublisher _)) continue;
                     var childNode = new TransformTreeNode(childGO);
                     tfNode.Children.Add(childNode);
                 }

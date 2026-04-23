@@ -160,6 +160,7 @@ namespace VehicleComponents.Sensors
     }
 
 
+    [AddComponentMenu("Smarc/Sensor/Sonar")]
     public class Sonar : Sensor
     {
 

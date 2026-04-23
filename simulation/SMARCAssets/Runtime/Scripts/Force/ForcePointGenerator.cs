@@ -43,6 +43,11 @@ namespace Force
                 var newFP = Instantiate(ExampleToCopy, transform.position + point, Quaternion.identity, transform);
                 newFP.name = $"ForcePoint_{point}";
                 newFP.SetActive(true);
+                newFP.TryGetComponent<SimpleGizmo>(out var gizmo);
+                if (gizmo != null)
+                {
+                    gizmo.radius = GizmoSize;
+                }
             }
         }
 

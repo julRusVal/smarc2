@@ -4,6 +4,7 @@ using DefaultNamespace.Water;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/LockedDirectionDepthSensor")]
     public class LockedDirectionDepthSensor : Sensor
     {
         [Header("Locked-Direction-Depth-Sensor")]

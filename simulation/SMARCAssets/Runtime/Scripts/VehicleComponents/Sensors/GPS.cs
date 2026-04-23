@@ -5,6 +5,7 @@ using DefaultNamespace.Water;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/GPS")]
     public class GPS: Sensor
     {
         [Header("GPS")]

@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/Leak")]
     public class Leak: Sensor
     {
         [Header("Leak")]

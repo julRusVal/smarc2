@@ -143,3 +143,5 @@ test_results/
 
 # Lock files (keep for reproducibility, but optional)
 # *.lock
+
+.DS_Store

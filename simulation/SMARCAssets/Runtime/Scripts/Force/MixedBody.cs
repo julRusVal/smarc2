@@ -16,6 +16,8 @@ namespace Force
 
         public bool isValid => ab != null || rb != null;
 
+        ArticulationBody[] childrenABs;
+
         public MixedBody(ArticulationBody ab, Rigidbody rb)
         {
             this.ab = ab;
@@ -125,6 +127,12 @@ namespace Force
                 else rb.linearVelocity = value;
             }
         }
+
+        public Vector3 localVelocity
+        {
+            get {return transform.InverseTransformVector(velocity); }
+            set {velocity = transform.TransformVector(value); }
+        }
         
         public Vector3 position
         {
@@ -157,44 +165,52 @@ namespace Force
             else j.connectedBody = rb;
         }
 
-        public float GetTotalConnectedMass()
+        /// <summary>
+        /// Get the total mass of the entire connected articulation body chain.
+        /// Crawls the entire articulation tree, so be careful running this in updates...
+        /// </summary>
+        public float GetTotalConnectedMass(bool includeChildren = true, bool ignoreNonGravityBodies = true)
         {
             // too much hassle to follow through an arbitrary system
             // of rigidbodies and joints...
             if(ab == null) return rb.mass;
 
-            // find the root of the articulation chain and sum up
-            // the mass of all the bodies
-            ArticulationBody root = ab;
-            while (root.transform.parent != null)
+            if (childrenABs == null) childrenABs = ab.GetComponentsInChildren<ArticulationBody>();
+            float totalMass = ab.mass;
+            if (!includeChildren) return totalMass;
+            foreach (var body in childrenABs)
             {
-                var parentAB = root.transform.parent.GetComponent<ArticulationBody>();
-                if(parentAB == null) break;
-                root = parentAB;
-                if(parentAB.isRoot) break;
+                if (body == ab) continue;
+                if (!body.isActiveAndEnabled) continue;
+                if (ignoreNonGravityBodies && !body.useGravity) continue;
+                totalMass += body.mass;
             }
-
-            float totalMass = 0f;
-            var queue = new Queue<ArticulationBody>();
-            queue.Enqueue(root);
-
-            while (queue.Count > 0)
-            {
-                ArticulationBody current = queue.Dequeue();
-                totalMass += current.mass;
-
-                for (int i = 0; i < current.transform.childCount; i++)
-                {
-                    ArticulationBody child = current.transform.GetChild(i).GetComponent<ArticulationBody>();
-                    if (child != null)
-                    {
-                        queue.Enqueue(child);
-                    }
-                }
-            }
-
             return totalMass;
+        }
 
+        /// <summary>
+        /// Get the center of mass of the entire connected articulation body chain in world coords.
+        /// Crawls the entire articulation tree, so be careful running this in updates...
+        /// </summary>
+        public Vector3 GetTotalConnectedCenterOfMass(bool includeChildren = true, bool ignoreNonGravityBodies = true)
+        {
+            Vector3 com = (position + transform.TransformVector(centerOfMass)) * mass;
+            if (!includeChildren) return com/mass;
+            if (ab == null) return com/mass;
+            var totalMass = mass;
+            if (childrenABs == null) childrenABs = ab.GetComponentsInChildren<ArticulationBody>();
+            foreach (var body in childrenABs)
+            {
+                if (body == ab) continue;
+                if (!body.isActiveAndEnabled) continue;
+                if (ignoreNonGravityBodies && !body.useGravity) continue;
+                totalMass += body.mass;
+                com += (body.transform.position + body.transform.TransformVector(body.centerOfMass)) * body.mass;
+            }
+
+            if (totalMass <= 0f) return Vector3.zero;
+
+            return com / totalMass;
         }
         
     

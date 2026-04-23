@@ -3,7 +3,6 @@ using TMPro;
 using System.Collections.Generic;
 
 using Utils = DefaultNamespace.Utils;
-using VehicleComponents.Sensors;
 using UnityEngine.EventSystems;
 using SmarcGUI.Water;
 using UnityEngine.UI;
@@ -57,8 +56,8 @@ namespace SmarcGUI
         Dictionary<string, string> cameraTextToObjectPath;
         public Camera CurrentCam { get; private set; }
         public Dictionary<string, RobotGUI> RobotGuis = new();
-        public RobotGUI SelectedRobotGUI {get; private set;}
-        public string SelectedRobotName => SelectedRobotGUI?.RobotName;
+        public List<RobotGUI> SelectedRobotGUIs {get; private set;} = new();
+        public List<string> SelectedRobotNames => SelectedRobotGUIs?.ConvertAll(r => r.RobotName) ?? new List<string>();
         
         WaterRenderToggle[] waterRenderToggles;
         bool renderWaters = true;
@@ -208,15 +207,20 @@ namespace SmarcGUI
 
         public void OnRobotSelectionChanged(RobotGUI robotgui)
         {
-            SelectedRobotGUI = robotgui.IsSelected? robotgui : null;
-            foreach(var r in RobotGuis)
+            bool add = robotgui.IsSelected;
+
+            if(add)
             {
-                if(r.Value.RobotName != robotgui.RobotName) r.Value.Deselect();
+                SelectedRobotGUIs.Add(robotgui);
+            }
+            else
+            {
+                SelectedRobotGUIs.Remove(robotgui);
             }
 
             foreach(var listener in robotSelectionChangeListeners)
             {
-                listener.OnRobotSelectionChange(SelectedRobotGUI);
+                listener.OnRobotSelectionChange(SelectedRobotGUIs);
             }
         }
         

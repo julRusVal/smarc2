@@ -8,6 +8,7 @@ using CameraImageSensor = VehicleComponents.Sensors.CameraImage;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/CameraImage_Pub")]
     [RequireComponent(typeof(CameraImageSensor))]
     class CameraImage_Pub : ROSSensorPublisher<ImageMsg, CameraImageSensor>
     {

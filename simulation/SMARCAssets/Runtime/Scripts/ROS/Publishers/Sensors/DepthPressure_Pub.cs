@@ -8,6 +8,7 @@ using ROS.Core;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/DepthPressure_Pub")]
     [RequireComponent(typeof(SensorPressure))]
     class DepthPressure_Pub: ROSSensorPublisher<FluidPressureMsg, SensorPressure>
     { 

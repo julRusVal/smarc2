@@ -8,6 +8,7 @@ using Unity.Robotics.ROSTCPConnector.ROSGeometry;
 
 namespace ROS.Publishers.GroundTruth
 {
+    [AddComponentMenu("Smarc/ROS/GT_Odom_Pub")]
     class GT_Odom_Pub : ROSPublisher<OdometryMsg>
     {
         MixedBody body;
@@ -38,8 +39,7 @@ namespace ROS.Publishers.GroundTruth
             ROSMsg.pose.pose.position = body.position.To<ENU>();
             ROSMsg.pose.pose.orientation = body.rotation.To<ENU>();
 
-            var vel = body.transform.InverseTransformVector(body.velocity);
-            ROSMsg.twist.twist.linear = vel.To<FLU>();
+            ROSMsg.twist.twist.linear = body.localVelocity.To<FLU>();
             var anvel = body.transform.InverseTransformVector(body.angularVelocity);
             ROSMsg.twist.twist.angular = -anvel.To<FLU>();
         }

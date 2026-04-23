@@ -9,6 +9,7 @@ using ROS.Core;
 
 namespace ROS.Publishers
 {
+    [AddComponentMenu("Smarc/ROS/SSS_Pub")]
     [RequireComponent(typeof(SideScanSonar))]
     class SSS_Pub: ROSSensorPublisher<SidescanMsg, SideScanSonar>
     { 

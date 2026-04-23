@@ -6,6 +6,7 @@ using DefaultNamespace.Water;
 
 namespace ROS.Publishers.GroundTruth
 {
+    [AddComponentMenu("Smarc/ROS/GT_Depth_Pub")]
     class GT_Depth_Pub : ROSPublisher<Float32Msg>
     {
         Transform base_link;

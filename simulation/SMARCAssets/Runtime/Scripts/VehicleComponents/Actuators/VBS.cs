@@ -3,6 +3,7 @@ using UnityEngine;
 
 namespace VehicleComponents.Actuators
 {
+    [AddComponentMenu("Smarc/Actuator/VBS")]
     public class VBS : LinkAttachment, IPercentageActuator
     {
         [Header("VBS")] [Range(0, 100)] public float percentage = 50f;

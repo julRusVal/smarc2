@@ -2,6 +2,7 @@ using UnityEngine;
 
 namespace VehicleComponents.Sensors
 {
+    [AddComponentMenu("Smarc/Sensor/DVL")]
     public class DVL: Sensor
     {
         [Header("DVL")]

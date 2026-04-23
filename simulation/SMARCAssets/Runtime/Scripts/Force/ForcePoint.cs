@@ -34,6 +34,9 @@ namespace Force
 
         [Tooltip("Maximum force applied by buoyancy. Nice to keep things from going to space :)")]
         public float MaxBuoyancyForce = 1000f;
+        [Tooltip("De-bounce factor. How many physics frames of look-ahead do we consider 'fast enough to jump out, dont apply buoyancy' when we are underwater? Helps prevent objects shooting to the moon if they are buoyant AND deep. Set to 0 to disable.")]
+        public int BuoyancyDebounceFrames = 3;
+
 
         [Header("Underwater/Air Drag")] [Tooltip("Linear Drag applied while underwater. Sets the connected body's drag/linearDamping value when underwater. Set to -1 to use the starting drag value of the body for this.")]
         public float UnderwaterDrag = -1f;
@@ -47,11 +50,15 @@ namespace Force
         [Tooltip("Angular Drag applied while underwater. Sets the connected body's drag/linearDamping value when above water. Set to -1 to use the starting drag value of the body for this.")]
         public float AirAngularDrag = -1f;
 
+
+
+
         [Header("Current state wrt water level")]
         public bool IsUnderwater = false;
-
         public bool IsSubmerged = false;
         public float CurrentDepth;
+
+
 
 
         [Header("Gravity")] [Tooltip("Do we over-ride the gravity of the connected body?")]
@@ -73,7 +80,7 @@ namespace Force
         private MixedBody body;
         private WaterQueryModel waterModel;
         private FrequencyTimer waterQueryTimer;
-        private ForcePoint[] allForcePoints;
+        private ForcePoint[] RelatedForcePoints;
 
 
         public Vector3 ApplyForce(Vector3 force, bool onlyUnderWater = false, bool onlyAboveWater = false)
@@ -86,7 +93,7 @@ namespace Force
 
             if (enabled)
             {
-                appliedForce = force / allForcePoints.Length;
+                appliedForce = force / RelatedForcePoints.Length;
                 body.AddForceAtPosition
                 (
                     appliedForce,
@@ -121,15 +128,18 @@ namespace Force
                 if (Mass == 0) Mass = body.mass;
             }
 
-            var waterModels = FindObjectsByType<WaterQueryModel>(FindObjectsSortMode.None);
-            if (waterModels.Length > 0) waterModel = waterModels[0];
-
-            allForcePoints = body.gameObject.GetComponentsInChildren<ForcePoint>();
+            waterModel = WaterQueryModel.GetWaterQueryModel();
+            
+            RelatedForcePoints = body.gameObject.GetComponentsInChildren<ForcePoint>();
+            // only consider points that are connected to the same body so that
+            // FPs can be grouped together, spread out as wanted, and allow "partial" forces on different
+            // parts of an articulation chain for example.
+            RelatedForcePoints = RelatedForcePoints.Where(p => p.ConnectedArticulationBody == ConnectedArticulationBody || p.ConnectedRigidbody == ConnectedRigidbody).ToArray();
             if (AutomaticCenterOfGravity)
             {
                 body.automaticCenterOfMass = false;
-                var centerOfMass = allForcePoints.Select(point => point.transform.localPosition).Aggregate(new Vector3(0, 0, 0), (s, v) => s + v);
-                body.centerOfMass = centerOfMass / allForcePoints.Length;
+                var centerOfMass = RelatedForcePoints.Select(point => point.transform.localPosition).Aggregate(new Vector3(0, 0, 0), (s, v) => s + v);
+                body.centerOfMass = centerOfMass / RelatedForcePoints.Length;
             }
 
             if (VolumeMesh == null && VolumeObject != null) VolumeMesh = VolumeObject.GetComponent<MeshFilter>().mesh;
@@ -142,9 +152,8 @@ namespace Force
         {
             if (waterModel == null)
             {
-                var waterModels = FindObjectsByType<WaterQueryModel>(FindObjectsSortMode.None);
-                if (waterModels.Length <= 0) return;
-                waterModel = waterModels[0];
+                waterModel = WaterQueryModel.GetWaterQueryModel();
+                if (waterModel == null) return;
             }
 
             float waterSurfaceLevel = waterModel.GetWaterLevelAt(transform.position);
@@ -180,6 +189,15 @@ namespace Force
                 float waterForceScale = WaterQueryFrequency > 0 ? 1f / Time.fixedDeltaTime / WaterQueryFrequency : 1f;
                 if (IsUnderwater)
                 {
+                    // before apply any buoyancy, check if our current upward speed would already take us out of the water
+                    // so that we dont go to the moon. The correct way to do this would be to be able to _set_ the position
+                    // of the body OR increase sim frequency, but articulations remove the first option and increasing sim
+                    // frequency is expensive, so here we are.
+                    float upwardSpeed = Vector3.Dot(body.velocity, Vector3.up);
+                    float dx = upwardSpeed * Time.fixedDeltaTime * BuoyancyDebounceFrames;
+                    bool willSurfaceSoon = CurrentDepth - dx <= 0;
+                    if (willSurfaceSoon) waterForceScale *= CurrentDepth / dx;
+
                     float displacementMultiplier = Mathf.Clamp01(CurrentDepth / DepthBeforeSubmerged);
                     var buoyancyForceMag = Volume * WaterDensity * Math.Abs(Physics.gravity.y) * displacementMultiplier;
                     buoyancyForceMag = Mathf.Min(MaxBuoyancyForce, buoyancyForceMag);
@@ -196,7 +214,7 @@ namespace Force
                 // and their drag really should reflect where they are moment to moment
                 // yes, all of the points will do the same thing. but this makes it so we dont need
                 // a central forcepoint controller or sth
-                var anyUnderwater = allForcePoints.Select(p => p.IsUnderwater).Aggregate(false, (s, v) => s || v);
+                var anyUnderwater = RelatedForcePoints.Select(p => p.IsUnderwater).Aggregate(false, (s, v) => s || v);
                 body.drag = anyUnderwater ? UnderwaterDrag : AirDrag;
                 body.angularDrag = anyUnderwater ? UnderwaterAngularDrag : AirAngularDrag;
             }

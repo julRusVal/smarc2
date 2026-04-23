@@ -7,6 +7,7 @@ using ROS.Core;
 
 namespace M350.PSDK_ROS2
 {
+    [AddComponentMenu("Smarc/PSDK_ROS/PsdkTakeoffService")]
     public class PsdkTakeoffService : ROSBehaviour
     {
         bool registered = false;

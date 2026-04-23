@@ -3,6 +3,7 @@ using ROS.Core;
 
 namespace VehicleComponents.Actuators
 {
+    [AddComponentMenu("Smarc/Actuator/Hinge")]
     public class Hinge : LinkAttachment, IROSPublishable
     {
         [Header("Hinge")] public float angle;

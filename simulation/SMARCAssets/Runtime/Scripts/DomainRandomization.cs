@@ -69,6 +69,36 @@ public class DomainRandomization : MonoBehaviour
     public float CameraFOVBase = 80f;
     public float CameraFOVRange = 20f;
 
+    [Header("Noise Material Randomization")]
+    [Tooltip("Renderers that use the YellowNoise material")]
+    public Renderer[] YellowNoiseRenderers;
+
+    [Tooltip("Renderers that use the OrangeNoise material")]
+    public Renderer[] OrangeNoiseRenderers;
+
+    [Header("Noise Surface Randomization")]
+    public bool RandomizeSurfaceAppearance = true;
+    [Range(0f, 1f)] public float SurfaceRandomizationStrength = 1.0f; // 0=off-ish, 1=full
+
+
+    [Header("Noise Color Strategy (Tuned for SAM/Buoy)")]
+    [Range(0f, 1f)] public float WarmShiftedChance = 0.70f;   // 1) near but degraded
+    [Range(0f, 1f)] public float HardNegativeChance = 0.15f;  // 2) close to target colors sometimes
+    [Range(0f, 1f)] public float FarChance = 0.15f;           // 3) far colors (cool/neutral) occasionally
+
+    // Colors:
+    // SAM rgba(248,236,150) -> hue ~0.146
+    // Buoy rgba(255,172,78) -> hue ~0.089
+    public Vector2 TargetYellowHueRange = new Vector2(0.113f, 0.179f); // ~53° ±12°
+    public Vector2 TargetOrangeHueRange = new Vector2(0.056f, 0.122f); // ~32° ±12°
+
+    static readonly int MetallicID = Shader.PropertyToID("_Metallic");
+    static readonly int SmoothnessID = Shader.PropertyToID("_Smoothness");
+
+    // HDRP/Lit base color property
+    static readonly int BaseColorID = Shader.PropertyToID("_BaseColor");
+
+    MaterialPropertyBlock _mpb;
 
     [Header("Files")]
     public int NumImages = 100;
@@ -79,6 +109,8 @@ public class DomainRandomization : MonoBehaviour
 
     void SetComponents()
     {
+        _mpb ??= new MaterialPropertyBlock();
+
         if (TheSun != null)
         {
             sunLight = TheSun.GetComponent<Light>();
@@ -153,6 +185,7 @@ public class DomainRandomization : MonoBehaviour
         RandomizeSkyAndFog();
         RandomizeWaterSurface();
         RandomizeCameras();
+        RandomizeNoiseMaterials();
         Debug.Log("Randomized all components for shot " + shotIndex);
     }
 
@@ -161,6 +194,7 @@ public class DomainRandomization : MonoBehaviour
         RandomizeSkyAndFog();
         RandomizeWaterSurface();
         RandomizeCameras();
+        RandomizeNoiseMaterials();
         Debug.Log("Randomized all components except sun for shot " + shotIndex);
     }
 
@@ -301,6 +335,117 @@ public class DomainRandomization : MonoBehaviour
             }
         }
         
+    }
+
+    void RandomizeNoiseMaterials()
+    {
+        // YellowNoise group
+        ApplyRandomDistractorAppearance(YellowNoiseRenderers, TargetYellowHueRange);
+
+        // OrangeNoise group
+        ApplyRandomDistractorAppearance(OrangeNoiseRenderers, TargetOrangeHueRange);
+    }
+
+    void ApplyRandomDistractorAppearance(Renderer[] renderers, Vector2 targetHueRange)
+    {
+        if (renderers == null || renderers.Length == 0) return;
+        _mpb ??= new MaterialPropertyBlock();
+
+        // Normalize user probabilities (sliders don't need to sum to 1)
+        float hard = Mathf.Max(0f, HardNegativeChance);
+        float warm = Mathf.Max(0f, WarmShiftedChance);
+        float far  = Mathf.Max(0f, FarChance);
+
+        float sum = hard + warm + far;
+        if (sum < 0.0001f)
+        {
+            // Default
+            hard = 0.20f;
+            warm = 0.75f;
+            far  = 0.05f;
+            sum = 1f;
+        }
+
+        hard /= sum;
+        warm /= sum;
+        far  /= sum;
+
+        float hardCut = hard;         // [0, hard)
+        float warmCut = hard + warm;  // [hard, hard+warm)
+        // far is the rest
+
+        foreach (var rend in renderers)
+        {
+            if (rend == null) continue;
+
+            // Per-renderer random choice (no groups)
+            float mode = Random.value;
+
+            float hueMin, hueMax;
+            float satMin, satMax;
+            float valMin, valMax;
+
+            if (mode < hardCut)
+            {
+                // 1) Hard negatives: target like hues sometimes (color != class)
+                hueMin = targetHueRange.x;
+                hueMax = targetHueRange.y;
+
+                satMin = 0.55f; satMax = 1.00f;
+                valMin = 0.45f; valMax = 1.00f;
+            }
+            else if (mode < warmCut)
+            {
+                // 2) Warm-shifted: warm family but degraded (avoid to looks exactly like target")
+                hueMin = 0.04f; hueMax = 0.23f;   // ~15°–83° (warm range)
+
+                // Degrade appearance: lower saturation and/or value
+                satMin = 0.08f; satMax = 0.65f;
+                valMin = 0.10f; valMax = 0.80f;
+            }
+            else
+            {
+                // 3) Far colors: small portion to prevent warm==target
+                if (Random.value < 0.5f)
+                {
+                    // Cool hues (blue/teal/purple)
+                    hueMin = 0.53f; hueMax = 0.83f; // ~190°–300°
+                    satMin = 0.20f; satMax = 1.00f;
+                    valMin = 0.10f; valMax = 1.00f;
+                }
+                else
+                {
+                    // Neutrals (gray/black/white): low saturation
+                    hueMin = 0.0f; hueMax = 1.0f;   // irrelevant when saturation low
+                    satMin = 0.00f; satMax = 0.12f;
+                    valMin = 0.06f; valMax = 0.95f;
+                }
+            }
+
+            Color c = Random.ColorHSV(hueMin, hueMax, satMin, satMax, valMin, valMax, 1f, 1f);
+
+            rend.GetPropertyBlock(_mpb);
+            _mpb.SetColor(BaseColorID, c);
+
+            if (RandomizeSurfaceAppearance)
+            {
+                // Avoid a lot of GUI options
+                float strength = Mathf.Clamp01(SurfaceRandomizationStrength);
+
+                // Keep metallic low (paint/plastic), but small variation
+                float metallic = Random.Range(0.0f, 0.15f) * strength;
+
+                // Big smoothness spread (useful in water scenes)
+                // strength=0 -> ~0.10, strength=1 -> random [0.02..0.95]
+                float smoothnessRand = Random.Range(0.02f, 0.95f);
+                float smoothness = Mathf.Lerp(0.10f, smoothnessRand, strength);
+
+                _mpb.SetFloat(MetallicID, metallic);
+                _mpb.SetFloat(SmoothnessID, smoothness);
+            }
+
+            rend.SetPropertyBlock(_mpb);
+        }
     }
 
     public void RandomizeSkyAndFog()
