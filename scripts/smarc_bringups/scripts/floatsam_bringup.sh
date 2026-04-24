@@ -19,7 +19,18 @@ USE_SIM_TIME="$SIM_TRUE"
 
 # --- Domain isolation + Public Square bridge config ---
 PUBLIC_DOMAIN=111
-NUM_ROBOTS=1
+NUM_ROBOTS=2
+
+if (( IDX >= NUM_ROBOTS )); then
+  echo "Error: IDX ${IDX} is out of range for NUM_ROBOTS=${NUM_ROBOTS}"
+  exit 1
+fi
+
+if (( IDX == PUBLIC_DOMAIN )); then
+  echo "Error: IDX must not be equal to PUBLIC_DOMAIN (${PUBLIC_DOMAIN})"
+  exit 1
+fi
+
 export ROS_DOMAIN_ID="$IDX"
 
 BRIDGE_YAML="/tmp/${ROBOT_NAME}_bridge.yaml"
@@ -71,46 +82,28 @@ cat >> "${BRIDGE_YAML}" <<EOF2
 EOF2
 done
 
-# TF rule:
-# IDX==0 publishes global map TF to public; others pull TF from public
-if [[ "${IDX}" -eq 0 ]]; then
+# Bridge TF both ways so each robot can resolve peer frames for RVO.
 cat >> "${BRIDGE_YAML}" <<EOF2
   /tf:
     type: tf2_msgs/msg/TFMessage
     from_domain: ${IDX}
     to_domain: ${PUBLIC_DOMAIN}
+    bidirectional: true
 
   /tf_static:
     type: tf2_msgs/msg/TFMessage
     from_domain: ${IDX}
     to_domain: ${PUBLIC_DOMAIN}
+    bidirectional: true
     qos:
       durability: transient_local
       reliability: reliable
       history: keep_last
       depth: 1
 EOF2
-else
-cat >> "${BRIDGE_YAML}" <<EOF2
-  /tf:
-    type: tf2_msgs/msg/TFMessage
-    from_domain: ${PUBLIC_DOMAIN}
-    to_domain: ${IDX}
 
-  /tf_static:
-    type: tf2_msgs/msg/TFMessage
-    from_domain: ${PUBLIC_DOMAIN}
-    to_domain: ${IDX}
-    qos:
-      durability: transient_local
-      reliability: reliable
-      history: keep_last
-      depth: 1
-EOF2
-fi
-
-# Pull peer telemetry from public domain (2 robots)
-for PEER_IDX in 0 1; do
+# Pull peer telemetry from public domain 
+for PEER_IDX in $(seq 0 $((NUM_ROBOTS - 1))); do
   if [[ "${PEER_IDX}" -eq "${IDX}" ]]; then
     continue
   fi
