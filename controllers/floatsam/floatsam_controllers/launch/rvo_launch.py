@@ -7,6 +7,8 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     robot_ns = LaunchConfiguration('robot_name')
+    use_sim = LaunchConfiguration('use_sim')
+    num_robots = LaunchConfiguration('num_robots')
     config = os.path.join(
         get_package_share_directory('floatsam_controllers'),
         'config',
@@ -16,6 +18,16 @@ def generate_launch_description():
     robot_ns_launch_arg = DeclareLaunchArgument(
         'robot_name',
         default_value='floatsam_usv'
+    )
+
+    use_sim_launch_arg = DeclareLaunchArgument(
+        'use_sim',
+        default_value='False'
+    )
+
+    num_robots_launch_arg = DeclareLaunchArgument(
+        'num_robots',
+        default_value='2'
     )
 
     node = Node(
@@ -28,5 +40,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         robot_ns_launch_arg,
+        use_sim_launch_arg,
+        num_robots_launch_arg,
         node
     ])

@@ -19,6 +19,16 @@ def generate_launch_description():
         default_value='floatsam_usv'
     )
 
+    odom_splitter_node = Node(
+        package='odom_splitter',
+        namespace=robot_ns,
+        executable='odom_splitter',
+        name='odom_splitter',
+        parameters=[{"robot_name": robot_ns}]
+    )
+
+
+
     captain_node = Node(
         package='floatsam_controllers',
         namespace=robot_ns,
@@ -29,5 +39,6 @@ def generate_launch_description():
 
     return LaunchDescription([
         robot_ns_launch_arg,
+        odom_splitter_node,
         captain_node
     ])

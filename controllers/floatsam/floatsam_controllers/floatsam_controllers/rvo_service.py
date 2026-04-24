@@ -179,13 +179,13 @@ class RVOservice(Node):
         double_desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE)
         string_desc = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
         bool_desc = ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)
-        self.declare_parameter("robot_name", "floatsam_0", string_desc)
-        self.declare_parameter("use_sim", True, bool_desc)
+        self.declare_parameter("robot_name", "floatsam_usv_0", string_desc)
+        self.declare_parameter("use_sim", False, bool_desc)
         self.declare_parameter("time_horizon", 0.5, double_desc)
         self.declare_parameter("safety_margin", 0.5, double_desc)
         self.declare_parameter("max_speed", 3.0, double_desc)
         self.declare_parameter("update_rate", 0.0, double_desc)
-        self.declare_parameter("num_robot", 3, double_desc)
+        self.declare_parameter("num_robots", 1, double_desc)
 
     def get_node_parameters(self):
         self.this_robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
@@ -194,7 +194,7 @@ class RVOservice(Node):
         self.safety_margin = self.get_parameter("safety_margin").get_parameter_value().double_value
         self.max_speed = self.get_parameter("max_speed").get_parameter_value().double_value
         self.time_horizon = self.get_parameter("time_horizon").get_parameter_value().double_value
-        self.num_robot = self.get_parameter("num_robot").get_parameter_value().integer_value
+        self.num_robot = self.get_parameter("num_robots").get_parameter_value().integer_value
         self.robot_ids = range(self.num_robot)
         self.robot_base_name = '_'.join(self.this_robot_name.split('_')[:-1])
     

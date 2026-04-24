@@ -179,11 +179,11 @@ class Captain(Node):
     
     def yaw_setpoint_cb(self, msg):
 
-        self.last_yaw_setpoint_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self.last_yaw_setpoint_time = self.time_now()
         self.yaw_setpoint = msg.data
 
     def velocity_setpoint_cb(self, msg):
-        self.last_velocity_setpoint_time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self.last_velocity_setpoint_time = self.time_now()
         self.velocity_setpoint_input = msg.data
 
     def captain_parameters_cb(self, msg):
@@ -270,7 +270,6 @@ class Captain(Node):
             (now - self.last_velocity_setpoint_time) < timeout
         )
         
-        
         if not measurements_ok or not setpoints_ok:
             self.thruster_port_msg.data = 0.0
             self.thruster_strb_msg.data = 0.0
@@ -279,6 +278,7 @@ class Captain(Node):
             
             self.last_thruster_port_cmd = 0.0
             self.last_thruster_strb_cmd = 0.0
+            self.logger.info("EITHER MEAS OR SETPOTINS ARE NOT OK!")
             return
 
         # --- PID Control Cascade ---

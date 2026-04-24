@@ -16,7 +16,7 @@ class FloatSam():
     def __init__(self,
                  node: Node,
                  robot_name: str,
-                 use_sim: bool = True):
+                 use_sim: bool = False):
         
         self._node : Node = node
         self._floatsam_in_map : None | PoseStamped = None
@@ -26,7 +26,7 @@ class FloatSam():
             self.GLOBAL_MAP_FRAME: str = 'unity_origin' 
             self.LOCAL_MAP_FRAME: str  = 'unity_origin' 
         else:
-            self.GLOBAL_MAP_FRAME: str = 'map'               
+            self.GLOBAL_MAP_FRAME: str = 'map'
             self.LOCAL_MAP_FRAME: str  = f"{robot_name}/map" 
 
         self._tf_buffer : Buffer = Buffer()
@@ -79,7 +79,7 @@ class FloatSam():
             try:
                 tf = self._tf_buffer.lookup_transform(
                     target_frame=self.LOCAL_MAP_FRAME,
-                    source_frame='utm',
+                    source_frame='utm_34_V',
                     time=Time(seconds=0),
                     timeout=Duration(seconds=1)
                 )
@@ -103,7 +103,7 @@ class FloatSam():
         in_map.pose.position.z = float(z)
 
         if not hasattr(self, '_utm_frame_cache') or self._utm_frame_cache is None:
-            candidates = ['utm_33_V', 'utm'] + [f'utm_{i}' for i in range(1, 61)]
+            candidates = ['utm_33_V', 'utm', 'utm_34_V'] + [f'utm_{i}' for i in range(1, 61)]
             source_frame = None
             for candidate in candidates:
                 try:
