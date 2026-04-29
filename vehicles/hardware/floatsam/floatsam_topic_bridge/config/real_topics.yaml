@@ -50,9 +50,9 @@
 
       # Odometry
       odom:
-        input_topic: 'fmu/out/vehicle_odometry'
+        input_topic: 'fmu/out/vehicle_local_position_v1'
         output_topic: 'smarc/odom'
-        msg_type: 'px4_msgs/VehicleOdometry'
+        msg_type: 'px4_msgs/VehicleLocalPosition'
 
       # Battery 
       battery:

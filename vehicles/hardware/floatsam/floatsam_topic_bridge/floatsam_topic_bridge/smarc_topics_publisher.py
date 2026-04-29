@@ -11,7 +11,7 @@ import importlib
 from septentrio_gnss_driver.msg import AttEuler
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
-from px4_msgs.msg import OffboardControlMode, VehicleControlMode, VehicleThrustSetpoint, VehicleTorqueSetpoint, SensorGps
+from px4_msgs.msg import OffboardControlMode, VehicleControlMode, VehicleThrustSetpoint, VehicleTorqueSetpoint, SensorGps, VehicleLocalPosition
 
 # ROS message types
 from sensor_msgs.msg import NavSatFix, Imu, FluidPressure, Range, Image, PointCloud2
@@ -88,6 +88,13 @@ class SmarcTopicsPublisher(Node):
         self.last_cmd_time = self.get_clock().now()
         self.is_offboard = False
 
+        self.last_ekf_reset_counter = 0
+        self.raw_px4_x = 0.0
+        self.raw_px4_y = 0.0
+        self.odom_offset_x = 0.0
+        self.odom_offset_y = 0.0
+        self.latest_px4_timestamp = 0  # <--- Added to track PX4 internal clock
+
         self._actuator_motors_cls = None
 
         # Relative topics — PushRosNamespace will prepend robot_name automatically
@@ -146,9 +153,12 @@ class SmarcTopicsPublisher(Node):
         return result
 
     def _get_message_class(self, msg_type_str):
-        """Dynamically import and return message class from string like 'std_msgs/Float32'"""
+        """Dynamically import and return message class from string like 'std_msgs/Float32' or 'pkg/msg/Type'"""
         try:
-            pkg, msg = msg_type_str.split('/')
+            parts = msg_type_str.split('/')
+            pkg = parts[0]        # The first part is always the package name
+            msg = parts[-1]       # The last part is always the message class name
+
             module = importlib.import_module(f'{pkg}.msg')
             return getattr(module, msg)
         except Exception as e:
@@ -367,15 +377,18 @@ class SmarcTopicsPublisher(Node):
 
     def _control_mode_callback(self, msg):
         self.is_offboard = msg.flag_control_offboard_enabled
+        self.latest_px4_timestamp = msg.timestamp
+
 
     def _rtk_heading_callback(self, msg):
         if math.isnan(msg.heading):
             return
+        corrected_heading = msg.heading + 90.0
         self.is_receiving_rtk_heading = True
-        heading_rad = math.radians(msg.heading)
+        heading_rad = math.radians(corrected_heading)
         self.latest_rtk_heading_rad = math.atan2(math.sin(heading_rad), math.cos(heading_rad))
         heading_msg = Float32()
-        heading_msg.data = float(msg.heading)
+        heading_msg.data = float(corrected_heading) % 360.0
         self.heading_pub.publish(heading_msg)
 
     def _rtk_position_callback(self, msg: NavSatFix):
@@ -385,32 +398,69 @@ class SmarcTopicsPublisher(Node):
 
         if not self.use_sim and hasattr(self, 'sensor_gps_pub'):
             px4_gps = SensorGps()
-            now_us = self.get_clock().now().nanoseconds // 1000
-            px4_gps.timestamp = now_us
-            px4_gps.timestamp_sample = now_us
+            
+            # --- CLOCK SYNC ---
+            px4_gps.timestamp = self.latest_px4_timestamp
+            px4_gps.timestamp_sample = self.latest_px4_timestamp
+            
+            # EKF requires a valid UTC time, so we convert ROS time to microseconds
+            px4_gps.time_utc_usec = self.get_clock().now().nanoseconds // 1000 
+            px4_gps.device_id = 1310720 # A standard PX4 GPS device ID
+            
             px4_gps.latitude_deg = float(msg.latitude)
             px4_gps.longitude_deg = float(msg.longitude)
             px4_gps.altitude_msl_m = float(msg.altitude)
             px4_gps.altitude_ellipsoid_m = float(msg.altitude)
             px4_gps.fix_type = 6
 
+            # --- PREVENT DIVISION BY ZERO IN EKF ---
+            # Clamp the minimum variance to 0.1 so it never hits 0.0
             if len(msg.position_covariance) == 9 and msg.position_covariance[0] > 0:
-                px4_gps.eph = float(math.sqrt(msg.position_covariance[0]))
+                px4_gps.eph = max(0.1, float(math.sqrt(msg.position_covariance[0])))
             else:
-                px4_gps.eph = 0.1
+                px4_gps.eph = 0.5
 
             if len(msg.position_covariance) == 9 and msg.position_covariance[8] > 0:
-                px4_gps.epv = float(math.sqrt(msg.position_covariance[8]))
+                px4_gps.epv = max(0.1, float(math.sqrt(msg.position_covariance[8])))
             else:
-                px4_gps.epv = 0.2
+                px4_gps.epv = 0.5
 
+            # These MUST be > 0 or the EKF test ratios become NaN!
+            px4_gps.s_variance_m_s = 0.5  # Speed variance
+            px4_gps.c_variance_rad = 0.5  # Course variance
+
+            # --- HEADING INJECTION ---
             px4_gps.heading = self.latest_rtk_heading_rad
+            px4_gps.heading_offset = math.radians(90.0)
+            px4_gps.heading_accuracy = 0.05 # EKF STRICTLY REQUIRES THIS to trust heading
+            
             px4_gps.satellites_used = 12
+		
+
+            px4_gps.vel_m_s = 0.0
             px4_gps.vel_n_m_s = 0.0
             px4_gps.vel_e_m_s = 0.0
             px4_gps.vel_d_m_s = 0.0
-            px4_gps.vel_ned_valid = False
+            px4_gps.vel_ned_valid = True  # <--- CHANGED FROM FALSE
+            px4_gps.s_variance_m_s = 0.5  # Tell EKF: "Velocity is valid, but very noisy, trust the IMU more"
+            px4_gps.c_variance_rad = 0.5 
+
+            # --- ADVANCED DEBUG LOGGING ---
+            self.get_logger().info(
+                f"\n--- GPS INJECTION DEBUG ---\n"
+                f"PX4 Clock (ts): {px4_gps.timestamp}\n"
+                f"UTC Clock: {px4_gps.time_utc_usec}\n"
+                f"Lat/Lon: {px4_gps.latitude_deg:.6f}, {px4_gps.longitude_deg:.6f}\n"
+                f"EPH: {px4_gps.eph:.3f}, EPV: {px4_gps.epv:.3f}\n"
+                f"S_Var: {px4_gps.s_variance_m_s:.3f}, C_Var: {px4_gps.c_variance_rad:.3f}\n"
+                f"Heading: {px4_gps.heading:.3f}, H_Acc: {px4_gps.heading_accuracy:.3f}\n"
+                f"---------------------------",
+                throttle_duration_sec=2.0
+            )
+            
             self.sensor_gps_pub.publish(px4_gps)
+
+
 
     def _publish_best_gps(self):
         """Publish best available GPS and set the Multi-Agent Auto-Datum on first fix"""
@@ -451,6 +501,24 @@ class SmarcTopicsPublisher(Node):
             except Exception as e:
                 self.get_logger().error(f"Failed to set auto-datum: {e}")
 
+        # --- ADDED: Calculate the dynamic Map -> Odom offset ---
+        if self.datum_is_set and not self.use_sim:
+            try:
+                utm_point = convert_latlon_to_utm(geopoint)
+                # Absolute map position
+                global_map_x = utm_point.point.x - self.datum_utm_x
+                global_map_y = utm_point.point.y - self.datum_utm_y
+                
+                # Position relative to THIS robot's local map
+                true_local_map_x = global_map_x - self.local_map_offset_x
+                true_local_map_y = global_map_y - self.local_map_offset_y
+                
+                # The "rubber band" difference between true GPS and drifting PX4 Odom
+                self.odom_offset_x = true_local_map_x - self.raw_px4_x
+                self.odom_offset_y = true_local_map_y - self.raw_px4_y
+            except Exception:
+                pass
+
     def _publish_static_transforms(self):
         """Creates the permanent links for the shared multi-agent map"""
         transforms_to_publish = []
@@ -475,16 +543,6 @@ class SmarcTopicsPublisher(Node):
         t_global.transform.translation.z = 0.0
         t_global.transform.rotation.w = 1.0
         transforms_to_publish.append(t_global)
-
-        t_local = TransformStamped()
-        t_local.header.stamp = self.get_clock().now().to_msg()
-        t_local.header.frame_id = f"{self.robot_name}/map"
-        t_local.child_frame_id = f"{self.robot_name}/odom"
-        t_local.transform.translation.x = 0.0
-        t_local.transform.translation.y = 0.0
-        t_local.transform.translation.z = 0.0
-        t_local.transform.rotation.w = 1.0
-        transforms_to_publish.append(t_local)
 
         self.static_tf_broadcaster.sendTransform(transforms_to_publish)
 
@@ -517,34 +575,66 @@ class SmarcTopicsPublisher(Node):
         if msg.data:
             self.get_logger().warn('  LEAK DETECTED!')
 
-    def _odom_callback(self, msg):
+    def _odom_callback(self, msg: VehicleLocalPosition):
         if self.use_sim:
             std_msg = msg
         else:
+            
+            if not msg.xy_valid or msg.dead_reckoning:
+                self.get_logger().warn('PX4 Local Position INVALID (Dead Reckoning). Odometry will drift rapidly!', throttle_duration_sec=2.0)
+                # Removed the strict 'return' here so downstream nodes don't starve!
+
+            if msg.xy_reset_counter != self.last_ekf_reset_counter:
+                self.get_logger().error(f'🚨 EKF ORIGIN RESET DETECTED! 🚨 PX4 shifted the local map! Counter: {self.last_ekf_reset_counter} -> {msg.xy_reset_counter}')
+                self.last_ekf_reset_counter = msg.xy_reset_counter
+
+            self.raw_px4_x = float(msg.y)
+            self.raw_px4_y = float(msg.x)
+
             std_msg = Odometry()
             std_msg.header.stamp = self.get_clock().now().to_msg()
             std_msg.header.frame_id = f"{self.robot_name}/odom"
             std_msg.child_frame_id = f"{self.robot_name}/base_link"
-            std_msg.pose.pose.position.x = float(msg.position[0])
-            std_msg.pose.pose.position.y = float(msg.position[1])
-            std_msg.pose.pose.position.z = float(msg.position[2])
-            std_msg.pose.pose.orientation.w = float(msg.q[0])
-            std_msg.pose.pose.orientation.x = float(msg.q[1])
-            std_msg.pose.pose.orientation.y = float(msg.q[2])
-            std_msg.pose.pose.orientation.z = float(msg.q[3])
-            std_msg.twist.twist.linear.x = float(msg.velocity[0])
-            std_msg.twist.twist.linear.y = float(msg.velocity[1])
-            std_msg.twist.twist.linear.z = float(msg.velocity[2])
+            
+            # NED to ENU conversion
+            std_msg.pose.pose.position.x = self.raw_px4_x
+            std_msg.pose.pose.position.y = self.raw_px4_y
+            std_msg.pose.pose.position.z = float(-msg.z)
+            
+            std_msg.twist.twist.linear.x = float(msg.vy)
+            std_msg.twist.twist.linear.y = float(msg.vx)
+            std_msg.twist.twist.linear.z = float(-msg.vz)
+            
+            # Heading to Quaternion (PX4 heading is math.pi/2 - ENU heading)
+            enu_heading = math.pi / 2.0 - float(msg.heading)
+            std_msg.pose.pose.orientation.w = math.cos(enu_heading / 2.0)
+            std_msg.pose.pose.orientation.x = 0.0
+            std_msg.pose.pose.orientation.y = 0.0
+            std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
 
-            t = TransformStamped()
-            t.header.stamp = std_msg.header.stamp
-            t.header.frame_id = std_msg.header.frame_id
-            t.child_frame_id = std_msg.child_frame_id
-            t.transform.translation.x = std_msg.pose.pose.position.x
-            t.transform.translation.y = std_msg.pose.pose.position.y
-            t.transform.translation.z = std_msg.pose.pose.position.z
-            t.transform.rotation = std_msg.pose.pose.orientation
-            self.tf_broadcaster.sendTransform(t)
+            t_base = TransformStamped()
+            t_base.header.stamp = std_msg.header.stamp
+            t_base.header.frame_id = std_msg.header.frame_id
+            t_base.child_frame_id = std_msg.child_frame_id
+            t_base.transform.translation.x = std_msg.pose.pose.position.x
+            t_base.transform.translation.y = std_msg.pose.pose.position.y
+            t_base.transform.translation.z = std_msg.pose.pose.position.z
+            t_base.transform.rotation = std_msg.pose.pose.orientation
+            self.tf_broadcaster.sendTransform(t_base)
+
+            if self.datum_is_set:
+                t_map = TransformStamped()
+                t_map.header.stamp = std_msg.header.stamp
+                t_map.header.frame_id = f"{self.robot_name}/map"
+                t_map.child_frame_id = f"{self.robot_name}/odom"
+                t_map.transform.translation.x = float(self.odom_offset_x)
+                t_map.transform.translation.y = float(self.odom_offset_y)
+                t_map.transform.translation.z = 0.0
+                t_map.transform.rotation.w = 1.0
+                t_map.transform.rotation.x = 0.0
+                t_map.transform.rotation.y = 0.0
+                t_map.transform.rotation.z = 0.0
+                self.tf_broadcaster.sendTransform(t_map)
 
         self.latest_odom = std_msg
         self.odom_pub.publish(std_msg)
