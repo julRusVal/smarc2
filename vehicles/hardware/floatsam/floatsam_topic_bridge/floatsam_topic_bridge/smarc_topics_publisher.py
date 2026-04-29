@@ -381,9 +381,14 @@ class SmarcTopicsPublisher(Node):
 
 
     def _rtk_heading_callback(self, msg):
-        if math.isnan(msg.heading):
+        heading = msg.heading
+        if math.isnan(heading):
             return
-        corrected_heading = msg.heading + 90.0
+        if heading < 0.0:
+            corrected_heading = - heading
+        else:
+            corrected_heading = 360.0 - heading
+            
         self.is_receiving_rtk_heading = True
         heading_rad = math.radians(corrected_heading)
         self.latest_rtk_heading_rad = math.atan2(math.sin(heading_rad), math.cos(heading_rad))
@@ -431,7 +436,7 @@ class SmarcTopicsPublisher(Node):
 
             # --- HEADING INJECTION ---
             px4_gps.heading = self.latest_rtk_heading_rad
-            px4_gps.heading_offset = math.radians(90.0)
+            px4_gps.heading_offset = 0.0
             px4_gps.heading_accuracy = 0.05 # EKF STRICTLY REQUIRES THIS to trust heading
             
             px4_gps.satellites_used = 12
