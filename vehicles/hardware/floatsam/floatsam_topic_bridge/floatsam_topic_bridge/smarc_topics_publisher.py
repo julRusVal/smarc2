@@ -388,7 +388,7 @@ class SmarcTopicsPublisher(Node):
             corrected_heading = - heading
         else:
             corrected_heading = 360.0 - heading
-            
+
         self.is_receiving_rtk_heading = True
         heading_rad = math.radians(corrected_heading)
         self.latest_rtk_heading_rad = math.atan2(math.sin(heading_rad), math.cos(heading_rad))
@@ -434,11 +434,16 @@ class SmarcTopicsPublisher(Node):
             px4_gps.s_variance_m_s = 0.5  # Speed variance
             px4_gps.c_variance_rad = 0.5  # Course variance
 
-            # --- HEADING INJECTION ---
-            px4_gps.heading = self.latest_rtk_heading_rad
-            px4_gps.heading_offset = 0.0
-            px4_gps.heading_accuracy = 0.05 # EKF STRICTLY REQUIRES THIS to trust heading
-            
+            # --- HEADING INJECTION SAFETY CHECK ---
+            if not math.isnan(self.latest_rtk_heading_rad):
+                px4_gps.heading = self.latest_rtk_heading_rad
+                px4_gps.heading_offset = 0.0
+                px4_gps.heading_accuracy = 0.05 # EKF STRICTLY REQUIRES THIS
+            else:
+                px4_gps.heading = float('nan')
+                px4_gps.heading_offset = float('nan')
+                px4_gps.heading_accuracy = float('nan') # Tell EKF we don't have heading yet
+                
             px4_gps.satellites_used = 12
 		
 
@@ -446,7 +451,7 @@ class SmarcTopicsPublisher(Node):
             px4_gps.vel_n_m_s = 0.0
             px4_gps.vel_e_m_s = 0.0
             px4_gps.vel_d_m_s = 0.0
-            px4_gps.vel_ned_valid = True  # <--- CHANGED FROM FALSE
+            px4_gps.vel_ned_valid = True 
             px4_gps.s_variance_m_s = 0.5  # Tell EKF: "Velocity is valid, but very noisy, trust the IMU more"
             px4_gps.c_variance_rad = 0.5 
 
