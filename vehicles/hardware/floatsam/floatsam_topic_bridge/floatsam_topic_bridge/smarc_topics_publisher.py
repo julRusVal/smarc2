@@ -500,6 +500,8 @@ class SmarcTopicsPublisher(Node):
                         tf = self.tf_buffer.lookup_transform(self.datum_zone, "map", rclpy.time.Time())
                         master_utm_x = tf.transform.translation.x
                         master_utm_y = tf.transform.translation.y
+                        self.datum_utm_x = master_utm_x   
+                        self.datum_utm_y = master_utm_y   
                         self.local_map_offset_x = utm_point.point.x - master_utm_x
                         self.local_map_offset_y = utm_point.point.y - master_utm_y
                         self.datum_is_set = True
