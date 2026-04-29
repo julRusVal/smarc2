@@ -617,12 +617,31 @@ class SmarcTopicsPublisher(Node):
             std_msg.twist.twist.linear.y = float(msg.vx)
             std_msg.twist.twist.linear.z = float(-msg.vz)
             
-            # Heading to Quaternion (PX4 heading is math.pi/2 - ENU heading)
-            enu_heading = math.pi / 2.0 - float(msg.heading)
+            # # Heading to Quaternion (PX4 heading is math.pi/2 - ENU heading)
+            # enu_heading = math.pi / 2.0 - float(msg.heading)
+            # std_msg.pose.pose.orientation.w = math.cos(enu_heading / 2.0)
+            # std_msg.pose.pose.orientation.x = 0.0
+            # std_msg.pose.pose.orientation.y = 0.0
+            # std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
+
+            # HEADING INJECTION LOGIC
+            if self.is_receiving_rtk_heading and not math.isnan(self.latest_rtk_heading_rad):
+                # Convert NED RTK heading to ENU Radian
+                enu_heading = (math.pi / 2.0) - self.latest_rtk_heading_rad
+            else:
+                # Fallback to PX4 EKF heading (already converted from NED to ENU)
+                enu_heading = (math.pi / 2.0) - float(msg.heading)
+
+            # Wrap to [-pi, pi]
+            enu_heading = math.atan2(math.sin(enu_heading), math.cos(enu_heading))
+
+            # Apply to Odometry message
             std_msg.pose.pose.orientation.w = math.cos(enu_heading / 2.0)
             std_msg.pose.pose.orientation.x = 0.0
             std_msg.pose.pose.orientation.y = 0.0
             std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
+
+            
 
             t_base = TransformStamped()
             t_base.header.stamp = std_msg.header.stamp
