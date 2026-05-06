@@ -356,9 +356,10 @@ class SmarcTopicsPublisher(Node):
             std_msg = msg
         else:
             std_msg = NavSatFix()
-            std_msg.latitude  = msg.lat / 1e7
-            std_msg.longitude = msg.lon / 1e7
-            std_msg.altitude  = msg.alt / 1000.0
+            # PX4 1.16 uses standard floats, so we remove the division math
+            std_msg.latitude  = float(msg.latitude_deg)
+            std_msg.longitude = float(msg.longitude_deg)
+            std_msg.altitude  = float(msg.altitude_msl_m)
         self.latest_gps_left = std_msg
         self.gps_left_pub.publish(std_msg)
         self._publish_best_gps()
@@ -368,9 +369,10 @@ class SmarcTopicsPublisher(Node):
             std_msg = msg
         else:
             std_msg = NavSatFix()
-            std_msg.latitude  = msg.lat / 1e7
-            std_msg.longitude = msg.lon / 1e7
-            std_msg.altitude  = msg.alt / 1000.0
+            # PX4 1.16 uses standard floats, so we remove the division math
+            std_msg.latitude  = float(msg.latitude_deg)
+            std_msg.longitude = float(msg.longitude_deg)
+            std_msg.altitude  = float(msg.altitude_msl_m)
         self.latest_gps_right = std_msg
         self.gps_right_pub.publish(std_msg)
         self._publish_best_gps()
@@ -391,7 +393,10 @@ class SmarcTopicsPublisher(Node):
 
         self.is_receiving_rtk_heading = True
         heading_rad = math.radians(corrected_heading)
-        self.latest_rtk_heading_rad = math.atan2(math.sin(heading_rad), math.cos(heading_rad))
+        if heading_rad > math.pi:
+            self.latest_rtk_heading_rad = heading_rad- 2 * math.pi
+        else:
+            self.latest_rtk_heading_rad = heading_rad
         heading_msg = Float32()
         heading_msg.data = float(corrected_heading) % 360.0
         self.heading_pub.publish(heading_msg)
@@ -438,7 +443,7 @@ class SmarcTopicsPublisher(Node):
             if not math.isnan(self.latest_rtk_heading_rad):
                 px4_gps.heading = self.latest_rtk_heading_rad
                 px4_gps.heading_offset = 0.0
-                px4_gps.heading_accuracy = 0.05 # EKF STRICTLY REQUIRES THIS
+                px4_gps.heading_accuracy = 0.05 
             else:
                 px4_gps.heading = float('nan')
                 px4_gps.heading_offset = float('nan')
@@ -451,7 +456,7 @@ class SmarcTopicsPublisher(Node):
             px4_gps.vel_n_m_s = 0.0
             px4_gps.vel_e_m_s = 0.0
             px4_gps.vel_d_m_s = 0.0
-            px4_gps.vel_ned_valid = True 
+            px4_gps.vel_ned_valid = False 
             px4_gps.s_variance_m_s = 0.5  # Tell EKF: "Velocity is valid, but very noisy, trust the IMU more"
             px4_gps.c_variance_rad = 0.5 
 
