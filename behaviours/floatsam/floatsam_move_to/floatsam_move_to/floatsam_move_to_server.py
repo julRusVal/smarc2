@@ -6,6 +6,7 @@ import json
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.time import Time, Duration
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 
 import traceback
 
@@ -34,48 +35,17 @@ class MoveToActionFloatSam():
     def __init__(self,
                  node: Node):
         self._node : Node = node
-        
-        self._node.declare_parameter('use_sim', True)
-        self._use_sim = self._node.get_parameter('use_sim').get_parameter_value().bool_value
-        
-        self._robot_name : str = self._node.get_parameter('robot_name').value
+
+        self.declare_node_parameters()
+        self.get_node_parameters()
+        self._client_cb_group = MutuallyExclusiveCallbackGroup()
+        self.create_subscriptions()
         
         self.MAP_FRAME : str = self._robot_name + '/map'
         self._floatsam = FloatSam(node, self._robot_name, use_sim=self._use_sim)
         
-        self._node.get_logger().info(f"FloatSam move_to server initialized for robot: {self._robot_name}")
+        self._node.get_logger().info(f"FloatSam move_to server initialized for robot: {self._robot_name}")  
 
-        self._default_goal_tolerance = 1  
-        self._default_speed_threshold = 10   
-
-        self.declare_node_parameters()
-
-        self._loiter_yaw_p_gain = str(self._node.get_parameter('yaw_p_gain').value)
-        self._loiter_yaw_i_gain = str(self._node.get_parameter('yaw_i_gain').value)
-        self._loiter_yaw_d_gain = str(self._node.get_parameter('yaw_d_gain').value)
-        self._loiter_yaw_threshold = str(self._node.get_parameter('yaw_threshold').value)
-
-        self._loiter_yawrate_p_gain = str(self._node.get_parameter('yawrate_p_gain').value)
-        self._loiter_yawrate_i_gain = str(self._node.get_parameter('yawrate_i_gain').value)
-        self._loiter_yawrate_d_gain = str(self._node.get_parameter('yawrate_d_gain').value)
-
-        self._loiter_velocity_p_gain = str(self._node.get_parameter('velocity_p_gain').value)
-        self._loiter_velocity_i_gain = str(self._node.get_parameter('velocity_i_gain').value)
-        self._loiter_velocity_d_gain = str(self._node.get_parameter('velocity_d_gain').value)
-
-        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, 10)
-
-        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, 10)
-
-        self._move_on_place_publisher = self._node.create_publisher(Bool, 'move_on_place', 1)
-
-        self._rvo_client = self._node.create_client(GetSafeVelocity, 'get_safe_velocity')
-
-        self._captain_parameters_publisher = self._node.create_publisher(
-            String, 
-            'captain_parameters',
-            10
-        )
         self._as = GentlerActionServer(
             node,
             "move_to",
@@ -92,6 +62,9 @@ class MoveToActionFloatSam():
 
 
     def declare_node_parameters(self) -> None:
+        self._node.declare_parameter("use_sim", True)
+        self._node.declare_parameter("robot_name", 'floatsam_usv')
+
         self._node.declare_parameter("yaw_p_gain", 0.3)
         self._node.declare_parameter("yaw_i_gain", 0.0)
         self._node.declare_parameter("yaw_d_gain", 0.1)
@@ -104,7 +77,54 @@ class MoveToActionFloatSam():
         self._node.declare_parameter("velocity_p_gain", 500.0)
         self._node.declare_parameter("velocity_i_gain", 10.0)
         self._node.declare_parameter("velocity_d_gain", 0.0)
+
+        self._node.declare_parameter("goal_tollerance", 1.0)
+        self._node.declare_parameter("speed_threshold", 10.0)
     
+    def get_node_parameters(self) -> None:
+        self._use_sim = self._node.get_parameter('use_sim').get_parameter_value().bool_value
+        self._robot_name = self._node.get_parameter('robot_name').get_parameter_value().string_value
+
+        self._move_to_yaw_p_gain = self._node.get_parameter('yaw_p_gain').get_parameter_value().double_value
+        self._move_to_yaw_i_gain = self._node.get_parameter('yaw_i_gain').get_parameter_value().double_value
+        self._move_to_yaw_d_gain = self._node.get_parameter('yaw_d_gain').get_parameter_value().double_value
+        self._move_to_yaw_threshold = self._node.get_parameter('yaw_threshold').get_parameter_value().double_value
+
+        self._move_to_yawrate_p_gain = self._node.get_parameter('yawrate_p_gain').get_parameter_value().double_value
+        self._move_to_yawrate_i_gain = self._node.get_parameter('yawrate_i_gain').get_parameter_value().double_value
+        self._move_to_yawrate_d_gain = self._node.get_parameter('yawrate_d_gain').get_parameter_value().double_value
+
+        self._move_to_velocity_p_gain = self._node.get_parameter('velocity_p_gain').get_parameter_value().double_value
+        self._move_to_velocity_i_gain = self._node.get_parameter('velocity_i_gain').get_parameter_value().double_value
+        self._move_to_velocity_d_gain = self._node.get_parameter('velocity_d_gain').get_parameter_value().double_value
+
+        self._default_goal_tolerance = self._node.get_parameter('goal_tollerance').get_parameter_value().double_value
+        self._default_speed_threshold = self._node.get_parameter('speed_threshold').get_parameter_value().double_value
+
+    def create_subscriptions(self):
+        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, 10)
+        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, 10)
+        self._move_on_place_publisher = self._node.create_publisher(Bool, 'move_on_place', 1)
+        self._rvo_client = self._node.create_client(GetSafeVelocity, 'get_safe_velocity', callback_group=self._client_cb_group)
+        self._captain_parameters_publisher = self._node.create_publisher(String, 'captain_parameters',10)
+
+    def _publish_captain_parameters(self):
+        """It publish the message containing the parameters for captain node"""
+        parameters = {
+            "yaw_p_gain" : self._move_to_yaw_p_gain,
+            "yaw_i_gain" : self._move_to_yaw_i_gain,
+            "yaw_d_gain" : self._move_to_yaw_d_gain,
+            "yaw_threshold" : self._move_to_yaw_threshold,
+            "yawrate_p_gain" : self._move_to_yawrate_p_gain,
+            "yawrate_i_gain" : self._move_to_yawrate_i_gain,
+            "yawrate_d_gain" : self._move_to_yawrate_d_gain,
+            "velocity_p_gain" : self._move_to_velocity_p_gain, 
+            "velocity_i_gain" : self._move_to_velocity_i_gain, 
+            "velocity_d_gain" : self._move_to_velocity_d_gain
+        }
+        msg = String()
+        msg.data = json.dumps(parameters)
+        self._captain_parameters_publisher.publish(msg)
     
     @property
     def now_stamp(self):
@@ -287,7 +307,7 @@ class MoveToActionFloatSam():
         angle_msg = FloatStamped()
         angle_msg.header.stamp = now
         angle_msg.data = 0.5  
-        self._publish_captain_parametrs()
+        self._publish_captain_parameters()
         
         return None
 
@@ -296,30 +316,11 @@ class MoveToActionFloatSam():
             return f"Distance remaining: {self._distance_remaining:.2f} (tolerance: {self._goal_tolerance:.2f}m)"
         else:
             return "No distance remaining info"
-        
-    def _publish_captain_parametrs(self):
-        """It publish the message containing the parameters for captain node"""
-        parameters = {
-            "yaw_p_gain" : self._loiter_yaw_p_gain,
-            "yaw_i_gain" : self._loiter_yaw_i_gain,
-            "yaw_d_gain" : self._loiter_yaw_d_gain,
-            "yaw_threshold" : self._loiter_yaw_threshold,
-            "yawrate_p_gain" : self._loiter_yawrate_p_gain,
-            "yawrate_i_gain" : self._loiter_yawrate_i_gain,
-            "yawrate_d_gain" : self._loiter_yaw_d_gain,
-            "velocity_p_gain" : self._loiter_velocity_p_gain, 
-            "velocity_i_gain" : self._loiter_velocity_i_gain, 
-            "velocity_d_gain" : self._loiter_velocity_d_gain
-        }
-        msg = String()
-        msg.data = json.dumps(parameters)
-        self._captain_parameters_publisher.publish(msg)
-        
+            
 
 def main(args=None):
     rclpy.init(args=args)
     node = Node("floatsam_move_to_action_server")
-    node.declare_parameter('robot_name', 'floatsam_usv')
 
     move_to_action = MoveToActionFloatSam(node)
     executor = MultiThreadedExecutor()
