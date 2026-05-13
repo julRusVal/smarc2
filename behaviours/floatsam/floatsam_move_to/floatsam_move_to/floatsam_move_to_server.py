@@ -9,6 +9,7 @@ from rclpy.time import Time, Duration
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rcl_interfaces.srv import GetParameters, SetParameters
 from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 
 import traceback
 
@@ -69,24 +70,28 @@ class MoveToActionFloatSam():
         self._initial_pos_timer = self._node.create_timer(0.5, self._check_initial_position)
 
     def declare_node_parameters(self) -> None:
-        self._node.declare_parameter("use_sim", True)
-        self._node.declare_parameter("robot_name", 'floatsam_usv')
+        double_desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE)
+        string_desc = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
+        bool_desc = ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)
 
-        self._node.declare_parameter("yaw_p_gain", 0.3)
-        self._node.declare_parameter("yaw_i_gain", 0.0)
-        self._node.declare_parameter("yaw_d_gain", 0.1)
-        self._node.declare_parameter("yaw_threshold", 0.5)
+        self._node.declare_parameter("use_sim", True, bool_desc)
+        self._node.declare_parameter("robot_name", 'floatsam_usv', string_desc)
 
-        self._node.declare_parameter("yawrate_p_gain", 300.0)
-        self._node.declare_parameter("yawrate_i_gain", 0.0)
-        self._node.declare_parameter("yawrate_d_gain", 30.0)
+        self._node.declare_parameter("yaw_p_gain", 0.3, double_desc)
+        self._node.declare_parameter("yaw_i_gain", 0.0, double_desc)
+        self._node.declare_parameter("yaw_d_gain", 0.1, double_desc)
+        self._node.declare_parameter("yaw_threshold", 0.5, double_desc)
 
-        self._node.declare_parameter("velocity_p_gain", 500.0)
-        self._node.declare_parameter("velocity_i_gain", 10.0)
-        self._node.declare_parameter("velocity_d_gain", 0.0)
+        self._node.declare_parameter("yawrate_p_gain", 300.0, double_desc)
+        self._node.declare_parameter("yawrate_i_gain", 0.0, double_desc)
+        self._node.declare_parameter("yawrate_d_gain", 30.0, double_desc)
 
-        self._node.declare_parameter("goal_tolerance", 1.0)
-        self._node.declare_parameter("speed_threshold", 10.0)
+        self._node.declare_parameter("velocity_p_gain", 500.0, double_desc)
+        self._node.declare_parameter("velocity_i_gain", 10.0, double_desc)
+        self._node.declare_parameter("velocity_d_gain", 0.0, double_desc)
+
+        self._node.declare_parameter("goal_tolerance", 1.0, double_desc)
+        self._node.declare_parameter("speed_threshold", 10.0, double_desc)
     
     def get_node_parameters(self) -> None:
         self._use_sim = self._node.get_parameter('use_sim').get_parameter_value().bool_value
