@@ -27,14 +27,13 @@ def generate_launch_description():
         parameters=[{"robot_name": robot_ns}]
     )
 
-
-
     captain_node = Node(
         package='floatsam_controllers',
         namespace=robot_ns,
         executable='captain',
         name='captain',
-        parameters=[config]  # Load parameters from the YAML file
+        output='screen',
+        parameters=[config]  
     )
 
     return LaunchDescription([

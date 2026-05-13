@@ -13,5 +13,5 @@
     'velocity_i_gain': 10.0
     'velocity_d_gain': 0.0
 
-    'goal_tollerance': 1.0
+    'goal_tolerance': 1.0
     'speed_threshold': 10.0

@@ -9,7 +9,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32
 from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
-from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+from rcl_interfaces.msg import ParameterDescriptor, ParameterType, SetParametersResult
 
 from smarc_msgs.msg import Topics as SmarcTopics
 from smarc_msgs.msg import FloatStamped
@@ -38,12 +38,9 @@ class Captain(Node):
         self.logger.info("Initializing FloatSam Captain node!")
 
         self.declare_node_parameters()
-
-        self.update_rate = self.get_parameter("update_rate").get_parameter_value().double_value
+        self.get_node_parameters()
         self.logger.info(f"Update rate: {self.update_rate} Hz")
 
-        self.robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
-        self.yaw_threshold = self.get_parameter("yaw_threshold").get_parameter_value().double_value
         self.move_on_place_flag = True
 
         
@@ -70,65 +67,16 @@ class Captain(Node):
         
         self.logger.info("Initialized 3 PID controllers with configurable gains")
 
-        self.rpm_deadband = self.get_parameter("rpm_deadband").get_parameter_value().double_value
-        self.thruster_limit = self.get_parameter("thruster_limit").get_parameter_value().double_value
+        self.initialise_node_attributes()
 
-        self.turn_in_place_min_rpm = self.get_parameter("turn_in_place_min_rpm").get_parameter_value().double_value
-        self.turn_in_place_gain = self.get_parameter("turn_in_place_gain").get_parameter_value().double_value
-        
-        self.max_delta_rpm = self.get_parameter("max_delta_rpm").get_parameter_value().double_value
-        self.last_thruster_port_cmd = 0.0
-        self.last_thruster_strb_cmd = 0.0
-                
-        self.yaw_measurement = 0.0
-        self.yaw_rate_measurement = 0.0
-        self.velocity_measurement = 0.0
-        
-        self.yaw_setpoint = 0.0
-        self.velocity_setpoint = 0.0
-        
-        self.last_yaw_meas_time = 0.0
-        self.last_yawrate_meas_time = 0.0
-        self.last_velocity_meas_time = 0.0
-        self.last_yaw_setpoint_time = 0.0
-        self.last_velocity_setpoint_time = 0.0
+        self.create_node_subscriptions()
 
+        self.create_node_publishers()
         
-        self.create_subscription(Float32, ControlTopics.CONTROL_YAW_TOPIC,
-                                 self.yaw_meas_cb, 1)
-        self.create_subscription(Float32, ControlTopics.CONTROL_YAW_RATE_TOPIC,
-                                 self.yawrate_meas_cb, 1)
-        self.create_subscription(Float32, ControlTopics.CONTROL_SURGE_RATE_TOPIC,
-                                 self.velocity_meas_cb, 1)
-    
-        
-        self.create_subscription(FloatStamped, FloatsamTopics.YAW_SETPOINT,
-                                 self.yaw_setpoint_cb, 1)
-        self.create_subscription(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT,
-                                 self.velocity_setpoint_cb, 1)
-        
-
-        self.create_subscription(String, 
-                                 f"/{self.robot_name}/captain_parameters",
-                                 self.captain_parameters_cb, 1
-                                 )
-        
-        self.create_subscription(Bool, 'move_on_place', self.move_on_place_cb, 1)
-        
-        self.thruster_port_msg = Float32()
-        self.thruster_strb_msg = Float32()
-        
-        self.thruster_port_pub = self.create_publisher(Float32,
-                                                       FloatsamTopics.THRUSTER_PORT_CMD, 1)
-        self.thruster_strb_pub = self.create_publisher(Float32,
-                                                       FloatsamTopics.THRUSTER_STRB_CMD, 1)
-        
-        
-
     def time_now(self):
         return self.get_clock().now().nanoseconds * 1e-9
 
-    def declare_node_parameters(self):
+    def declare_node_parameters(self) -> None:
         """Declare all configurable parameters for PIDs and mixer."""
         double_desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE)
         string_desc = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
@@ -158,17 +106,72 @@ class Captain(Node):
         self.declare_parameter("turn_in_place_min_rpm", 100.0, double_desc)
         self.declare_parameter("turn_in_place_gain", 10.0, double_desc)
 
+    def get_node_parameters(self) -> None:
+        self.robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
+        self.rpm_deadband = self.get_parameter("rpm_deadband").get_parameter_value().double_value
+        self.thruster_limit = self.get_parameter("thruster_limit").get_parameter_value().double_value
+
+        self.turn_in_place_min_rpm = self.get_parameter("turn_in_place_min_rpm").get_parameter_value().double_value
+        self.turn_in_place_gain = self.get_parameter("turn_in_place_gain").get_parameter_value().double_value
+        
+        self.max_delta_rpm = self.get_parameter("max_delta_rpm").get_parameter_value().double_value
+        self.update_rate = self.get_parameter("update_rate").get_parameter_value().double_value
+
+        self.yaw_threshold = self.get_parameter("yaw_threshold").get_parameter_value().double_value
+
+    def create_node_subscriptions(self) -> None:
+        self.create_subscription(Float32, ControlTopics.CONTROL_YAW_TOPIC,
+                                 self.yaw_meas_cb, 1)
+        self.create_subscription(Float32, ControlTopics.CONTROL_YAW_RATE_TOPIC,
+                                 self.yawrate_meas_cb, 1)
+        self.create_subscription(Float32, ControlTopics.CONTROL_SURGE_RATE_TOPIC,
+                                 self.velocity_meas_cb, 1)
+    
+        
+        self.create_subscription(FloatStamped, FloatsamTopics.YAW_SETPOINT,
+                                 self.yaw_setpoint_cb, 1)
+        self.create_subscription(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT,
+                                 self.velocity_setpoint_cb, 1)
+
+        self.add_on_set_parameters_callback(self._on_parameters_updated)
+        
+        self.create_subscription(Bool, 'move_on_place', self.move_on_place_cb, 1)
+
+    def create_node_publishers(self) -> None:
+        self.thruster_port_pub = self.create_publisher(Float32,
+                                                       FloatsamTopics.THRUSTER_PORT_CMD, 1)
+        self.thruster_strb_pub = self.create_publisher(Float32,
+                                                       FloatsamTopics.THRUSTER_STRB_CMD, 1)
+    
+    def initialise_node_attributes(self) -> None:
+        self.last_thruster_port_cmd = 0.0
+        self.last_thruster_strb_cmd = 0.0
+                
+        self.yaw_measurement = 0.0
+        self.yaw_rate_measurement = 0.0
+        self.velocity_measurement = 0.0
+        
+        self.yaw_setpoint = 0.0
+        self.velocity_setpoint = 0.0
+        
+        self.last_yaw_meas_time = 0.0
+        self.last_yawrate_meas_time = 0.0
+        self.last_velocity_meas_time = 0.0
+        self.last_yaw_setpoint_time = 0.0
+        self.last_velocity_setpoint_time = 0.0
+
+        self.thruster_port_msg = Float32()
+        self.thruster_strb_msg = Float32()
+    
     # Callbacks: Sensor measurements
     
     def yaw_meas_cb(self, msg):
         self.last_yaw_meas_time = self.time_now()
         self.yaw_measurement = msg.data 
 
-
     def yawrate_meas_cb(self, msg):
         self.last_yawrate_meas_time = self.time_now()
         self.yaw_rate_measurement = msg.data
-
 
     def velocity_meas_cb(self, msg):
         self.last_velocity_meas_time = self.time_now()
@@ -184,26 +187,37 @@ class Captain(Node):
 
     def velocity_setpoint_cb(self, msg):
         self.last_velocity_setpoint_time = self.time_now()
-        self.velocity_setpoint_input = msg.data
+        self.velocity_setpoint = msg.data
 
-    def captain_parameters_cb(self, msg):
-        try:
-            paramaters = json.loads(msg.data)
-            self.yaw_pid.kP = float(paramaters["yaw_p_gain"])
-            self.yaw_pid.kI = float(paramaters["yaw_i_gain"])
-            self.yaw_pid.kD = float(paramaters["yaw_d_gain"])
-            self.yaw_threshold = float(paramaters["yaw_threshold"])   
-            self.yawrate_pid.kP = float(paramaters["yawrate_p_gain"])
-            self.yawrate_pid.kI = float(paramaters["yawrate_i_gain"])
-            self.yawrate_pid.kD = float(paramaters["yawrate_d_gain"])
-            self.velocity_pid.kP = float(paramaters["velocity_p_gain"])
-            self.velocity_pid.kI = float(paramaters["velocity_i_gain"])
-            self.velocity_pid.kD = float(paramaters["velocity_d_gain"])
+    def _on_parameters_updated(self, params):
+        """Automatically called when an external node sets our parameters via service."""
+        for param in params:
+            if param.name == "yaw_p_gain":
+                self.yaw_pid.kP = param.value
+            elif param.name == "yaw_i_gain":
+                self.yaw_pid.kI = param.value
+            elif param.name == "yaw_d_gain":
+                self.yaw_pid.kD = param.value
+            elif param.name == "yaw_threshold":
+                self.yaw_threshold = param.value
             
-        except Exception as e:
-            self.logger.error(f"Failed to parse captain parameters: {e}")
+            elif param.name == "yawrate_p_gain":
+                self.yawrate_pid.kP = param.value
+            elif param.name == "yawrate_i_gain":
+                self.yawrate_pid.kI = param.value
+            elif param.name == "yawrate_d_gain":
+                self.yawrate_pid.kD = param.value
+                
+            elif param.name == "velocity_p_gain":
+                self.velocity_pid.kP = param.value
+            elif param.name == "velocity_i_gain":
+                self.velocity_pid.kI = param.value
+            elif param.name == "velocity_d_gain":
+                self.velocity_pid.kD = param.value
+
+        self.logger.info("Captain PID parameters successfully updated on the fly.")
+        return SetParametersResult(successful=True)
     
-    # Rate limiter (delta RPM health check)
     def apply_rate_limit(self, new_cmd, last_cmd, name):
         """
         Limit the rate of change of thruster commands.
@@ -278,7 +292,6 @@ class Captain(Node):
             
             self.last_thruster_port_cmd = 0.0
             self.last_thruster_strb_cmd = 0.0
-            self.logger.info("EITHER MEAS OR SETPOTINS ARE NOT OK!")
             return
 
         # --- PID Control Cascade ---
@@ -294,7 +307,7 @@ class Captain(Node):
         
 
         if np.abs(yaw_error) <= self.yaw_threshold or not self.move_on_place_flag:
-            velocity_error = self.velocity_setpoint_input - self.velocity_measurement
+            velocity_error = self.velocity_setpoint - self.velocity_measurement
             velocity_rpm_setpoint = self.velocity_pid.update_error(velocity_error, now)
         else:
             velocity_rpm_setpoint = 0

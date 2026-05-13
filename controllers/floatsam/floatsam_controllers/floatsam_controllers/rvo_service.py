@@ -36,8 +36,6 @@ class RVOservice(Node):
         # request.robot_id
         # request.pref_velocity
 
-        self.get_logger().info('The service has been activated')
-
         self.this_robot_id = request.robot_id
         self.pref_velocity = request.pref_velocity
 
@@ -61,7 +59,6 @@ class RVOservice(Node):
                 break
 
         if pref_is_safe:
-            self.get_logger().info('The DESIRED velocity is safe')
             pref_speed = float(np.linalg.norm(pref_velocity_vec))
             pref_angle = float(np.arctan2(pref_velocity_vec[1], pref_velocity_vec[0]))
 
@@ -97,7 +94,7 @@ class RVOservice(Node):
 
         if best_velocity is None:
             response.success = False
-            self.get_logger().info('The COMPUTED velocity is NONE')
+            self.get_logger().warn('The COMPUTED velocity is NONE')
             return response
         
         self.get_logger().info('The COMPUTED velocity is SAFE')
@@ -179,13 +176,14 @@ class RVOservice(Node):
         double_desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE)
         string_desc = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
         bool_desc = ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)
+        int_desc = ParameterDescriptor(type=ParameterType.PARAMETER_INTEGER)
         self.declare_parameter("robot_name", "floatsam_usv_0", string_desc)
         self.declare_parameter("use_sim", False, bool_desc)
         self.declare_parameter("time_horizon", 0.5, double_desc)
         self.declare_parameter("safety_margin", 0.5, double_desc)
         self.declare_parameter("max_speed", 3.0, double_desc)
         self.declare_parameter("update_rate", 0.0, double_desc)
-        self.declare_parameter("num_robots", 1, double_desc)
+        self.declare_parameter("num_robots", 1, int_desc)
 
     def get_node_parameters(self):
         self.this_robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
