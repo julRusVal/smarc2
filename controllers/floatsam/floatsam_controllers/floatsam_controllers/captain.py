@@ -10,6 +10,7 @@ from std_msgs.msg import Float32
 from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
 from rcl_interfaces.msg import ParameterDescriptor, ParameterType, SetParametersResult
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from smarc_msgs.msg import Topics as SmarcTopics
 from smarc_msgs.msg import FloatStamped
@@ -120,6 +121,13 @@ class Captain(Node):
         self.yaw_threshold = self.get_parameter("yaw_threshold").get_parameter_value().double_value
 
     def create_node_subscriptions(self) -> None:
+
+        best_effort_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         self.create_subscription(Float32, ControlTopics.CONTROL_YAW_TOPIC,
                                  self.yaw_meas_cb, 1)
         self.create_subscription(Float32, ControlTopics.CONTROL_YAW_RATE_TOPIC,
@@ -129,9 +137,9 @@ class Captain(Node):
     
         
         self.create_subscription(FloatStamped, FloatsamTopics.YAW_SETPOINT,
-                                 self.yaw_setpoint_cb, 1)
+                                 self.yaw_setpoint_cb, best_effort_qos)
         self.create_subscription(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT,
-                                 self.velocity_setpoint_cb, 1)
+                                 self.velocity_setpoint_cb, best_effort_qos)
 
         self.add_on_set_parameters_callback(self._on_parameters_updated)
         

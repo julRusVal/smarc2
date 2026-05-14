@@ -10,6 +10,8 @@ from rclpy.time import Time, Duration
 from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType, ParameterDescriptor
 from rcl_interfaces.srv import GetParameters, SetParameters
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+
 
 
 import traceback
@@ -115,9 +117,15 @@ class MoveToActionFloatSam():
 
     def create_node_publishers(self) -> None:
 
-        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, 10)
+        best_effort_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
 
-        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, 10)
+        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, best_effort_qos)
+
+        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, best_effort_qos)
 
         self._move_on_place_publisher = self._node.create_publisher(Bool, 'move_on_place', 1)
 

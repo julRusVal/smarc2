@@ -10,6 +10,8 @@ from rclpy.action import ActionClient
 from rclpy.time import Time, Duration
 from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType, ParameterDescriptor
 from rcl_interfaces.srv import GetParameters, SetParameters
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+
 import time
 
 import traceback
@@ -174,8 +176,14 @@ class LoiterActionFloatSam():
         self._saved_background_parameters = None
 
     def create_node_publishers(self) -> None:
+        best_effort_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         self._speed_reference_publisher = self._node.create_publisher(
-            FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, 10
+            FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, best_effort_qos
         )
 
         self._feedback_pub = self._node.create_publisher(
@@ -183,7 +191,7 @@ class LoiterActionFloatSam():
         )        
 
         self._heading_reference_publisher = self._node.create_publisher(
-           FloatStamped, FloatsamTopics.YAW_SETPOINT, 10
+           FloatStamped, FloatsamTopics.YAW_SETPOINT, best_effort_qos
         )
 
     def _read_captain_parameters(self) -> list:

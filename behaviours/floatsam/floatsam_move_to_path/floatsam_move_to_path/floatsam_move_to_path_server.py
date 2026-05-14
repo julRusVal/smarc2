@@ -10,6 +10,8 @@ from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 from rcl_interfaces.srv import GetParameters, SetParameters
 from rcl_interfaces.msg import Parameter, ParameterValue
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+
 
 import traceback
 
@@ -105,8 +107,14 @@ class MoveToPathActionFloatSam():
         self._default_speed_threshold = self._node.get_parameter('default_speed_threshold').get_parameter_value().double_value
 
     def create_node_publishers(self) -> None:
-        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, 10)
-        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, 10)
+        best_effort_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
+        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, best_effort_qos)
+        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, best_effort_qos)
 
     def create_node_subscribers(self) -> None:
         self._param_cb_group = MutuallyExclusiveCallbackGroup()

@@ -9,6 +9,8 @@ from rclpy.time import Time, Duration
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rcl_interfaces.srv import GetParameters, SetParameters
 from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType, ParameterDescriptor
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+
 
 import traceback
 
@@ -44,6 +46,7 @@ class MoveToActionFloatSam():
         self.get_node_parameters()
 
         self._client_cb_group = MutuallyExclusiveCallbackGroup()
+        self.create_node_publishers()
         self.create_subscriptions()
         
         self._param_cb_group = MutuallyExclusiveCallbackGroup()
@@ -112,9 +115,18 @@ class MoveToActionFloatSam():
         self._default_goal_tolerance = self._node.get_parameter('goal_tolerance').get_parameter_value().double_value
         self._default_speed_threshold = self._node.get_parameter('speed_threshold').get_parameter_value().double_value
 
+    def create_node_publishers(self) -> None:
+        best_effort_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
+        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, best_effort_qos)
+        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, best_effort_qos)
+
     def create_subscriptions(self) -> None:
-        self._yaw_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.YAW_SETPOINT, 10)
-        self._speed_reference_publisher = self._node.create_publisher(FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, 10)
+        
         self._move_on_place_publisher = self._node.create_publisher(Bool, 'move_on_place', 1)
         self._rvo_client = self._node.create_client(GetSafeVelocity, 'get_safe_velocity', callback_group=self._client_cb_group)
         self._captain_parameters_publisher = self._node.create_publisher(String, 'captain_parameters',10)
