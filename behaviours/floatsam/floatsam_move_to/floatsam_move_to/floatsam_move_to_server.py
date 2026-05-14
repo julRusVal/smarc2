@@ -8,8 +8,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.time import Time, Duration
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rcl_interfaces.srv import GetParameters, SetParameters
-from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
-from rcl_interfaces.msg import ParameterDescriptor, ParameterType
+from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType, ParameterDescriptor
 
 import traceback
 
@@ -292,10 +291,14 @@ class MoveToActionFloatSam():
     def _loop_inner(self) -> bool|None:
         if self._goal_in_map is None:
             self._node.get_logger().info("No goal set, failing...", throttle_duration_sec=0.5)
+            if self._saved_background_parameters:
+                self._write_captain_parameters(self._saved_background_parameters)
             return False
 
         if self._goal_tolerance is None:
             self._node.get_logger().info("No goal tolerance set, failing...", throttle_duration_sec=0.5)
+            if self._saved_background_parameters:
+                self._write_captain_parameters(self._saved_background_parameters)
             return False
 
         if self._floatsam.floatsam_in_map is None:

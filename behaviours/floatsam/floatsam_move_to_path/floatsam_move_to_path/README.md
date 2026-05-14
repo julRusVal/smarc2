@@ -73,4 +73,4 @@ ros2 run floatsam_go_to_formation floatsam_move_to_path_action_server \
 You can activate the server using the ROS 2 CLI. The goal string is a YAML representation containing the JSON payload.
 #### Example: Two-waypoint path with speed override mode
 ```bash
-ros2 action send_goal /floatsam_usv_0/move_path smarc_msgs/action/BaseAction "{goal: {data: '{\"waypoints\": [{\"latitude\": 58.8405, \"longitude\": 17.6520, \"tolerance\": 2.0}, {\"latitude\": 58.8410, \"longitude\": 17.6530, \"tolerance\": 1.0}], \"speed\": \"override\", \"constant_speed\": false}'}}"
+ros2 action send_goal /floatsam_usv_0/move_path smarc_msgs/action/BaseAction "{goal: {data: '{\"waypoints\": [{\"latitude\": 58.8411188911447, \"longitude\": 17.6528805771585, \"tolerance\": 1.0}, {\"latitude\": 58.8407650608519, \"longitude\": 17.6527441969969, \"tolerance\": 1.0}], \"speed\": \"standard\", \"constant_speed\": false}'}}"

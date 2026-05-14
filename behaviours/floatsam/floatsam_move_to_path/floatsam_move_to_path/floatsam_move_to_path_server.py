@@ -296,6 +296,8 @@ class MoveToPathActionFloatSam():
     def _loop_inner(self) -> bool|None:
         if self._goal_in_map is None or not self._goal_in_map:
             self._node.get_logger().info('No goal set, failing...')
+            if self._saved_background_parameters:
+                self._write_captain_parameters(self._saved_background_parameters)
             return False
 
         if self._floatsam.floatsam_in_map is None:

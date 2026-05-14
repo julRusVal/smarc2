@@ -19,7 +19,7 @@ USE_SIM_TIME="$SIM_TRUE"
 
 # --- Domain isolation + Public Square bridge config ---
 PUBLIC_DOMAIN=111
-NUM_ROBOTS=1
+NUM_ROBOTS=3
 
 if (( IDX >= NUM_ROBOTS )); then
     echo "Error: IDX ${IDX} is out of range for NUM_ROBOTS=${NUM_ROBOTS}"
