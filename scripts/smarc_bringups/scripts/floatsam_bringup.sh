@@ -19,7 +19,7 @@ USE_SIM_TIME="$SIM_TRUE"
 
 # --- Domain isolation + Public Square bridge config ---
 PUBLIC_DOMAIN=111
-NUM_ROBOTS=3
+NUM_ROBOTS=1
 
 if (( IDX >= NUM_ROBOTS )); then
     echo "Error: IDX ${IDX} is out of range for NUM_ROBOTS=${NUM_ROBOTS}"
@@ -42,6 +42,7 @@ ACTIONS=(
     loiter_heading
     go_to_formation
     go_to_formation_rvo
+    move_to_bidirectional
 )
 
 echo "[domain_bridge] generating ${BRIDGE_YAML} (robot_domain=${IDX}, public_domain=${PUBLIC_DOMAIN})"
@@ -211,9 +212,9 @@ tmux select-pane -t "$SESSION:4.3"
 tmux send-keys "ros2 launch floatsam_loiter_heading floatsam_loiter_heading.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 
 # --- Go_to_formation ---
-tmux new-window -t "$SESSION:5" -n "go_to_formation"
+tmux new-window -t "$SESSION:5" -n "move-to_bidirectional"
 tmux select-window -t "$SESSION:5"
-tmux send-keys "ros2 launch floatsam_go_to_formation floatsam_go_to_formation.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux send-keys "ros2 launch floatsam_move_to_bidirectional floatsam_move_to_bidirectional.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 
 # --- Go_to_formation_rvo ---
 tmux new-window -t "$SESSION:6" -n "go_to_formation_rvo"

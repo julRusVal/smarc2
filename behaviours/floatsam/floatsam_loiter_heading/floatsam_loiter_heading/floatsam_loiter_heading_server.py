@@ -26,7 +26,7 @@ from smarc_action_base.gentler_action_server import GentlerActionServer
 class LoiterActionFloatSam():
     """
     Loiter action server that maintains FloatSam position within a tolerance circle.
-    When the vehicle drifts outside the tolerance, it triggers move_to action with strict tolerance.
+    When the vehicle drifts outside the tolerance, it triggers move_to_bidirectional action with strict tolerance.
     """
     def __init__(self, node: Node):
         self._node: Node = node
@@ -93,17 +93,17 @@ class LoiterActionFloatSam():
         self._move_to_client = ActionClient(
             self._node,
             BaseAction,
-            'move_to'
+            'move_to_bidirectional'
         )
         
-        action_name = self._node.get_namespace() + '/move_to' if self._node.get_namespace() != '/' else '/move_to'
-        self._node.get_logger().info(f"Waiting for move_to action server at: {action_name}")
+        action_name = self._node.get_namespace() + '/move_to_bidirectional' if self._node.get_namespace() != '/' else '/move_to_bidirectional'
+        self._node.get_logger().info(f"Waiting for move_to_bidirectional action server at: {action_name}")
         server_available = self._move_to_client.wait_for_server(timeout_sec=5.0)
         if server_available:
-            self._node.get_logger().info(f"move_to action server available at {action_name}!")
+            self._node.get_logger().info(f"move_to_bidirectional action server available at {action_name}!")
         else:
-            self._node.get_logger().error(f"move_to action server NOT available at {action_name}! Loiter will not work properly.")
-            self._node.get_logger().error("Make sure the floatsam_move_to_action_server is running.")
+            self._node.get_logger().error(f"move_to_bidirectional action server NOT available at {action_name}! Loiter will not work properly.")
+            self._node.get_logger().error("Make sure the floatsam_move_to_bidirectional_action_server is running.")
         
         self._speed_reference_publisher = self._node.create_publisher(
             FloatStamped, FloatsamTopics.VELOCITY_SETPOINT, 10
