@@ -14,12 +14,12 @@ fi
 ROBOT_NAME="floatsam_usv_${IDX}"
 SESSION="${ROBOT_NAME}_bringup"
 
-SIM_TRUE=false
+SIM_TRUE=true
 USE_SIM_TIME="$SIM_TRUE"
 
 # --- Domain isolation + Public Square bridge config ---
 PUBLIC_DOMAIN=111
-NUM_ROBOTS=2
+NUM_ROBOTS=3
 
 if (( IDX >= NUM_ROBOTS )); then
     echo "Error: IDX ${IDX} is out of range for NUM_ROBOTS=${NUM_ROBOTS}"
