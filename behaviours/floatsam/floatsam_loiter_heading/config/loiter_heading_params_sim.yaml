@@ -1,9 +1,9 @@
 /**:
   ros__parameters:
     "loiter_tolerance" : 5.0               
-    "heading_tolerance": 6.0
-    "loiter_reposition_tolerance": 0.5
-    "loiter_move_to_speed": 'fast'
+    "heading_tolerance": 15.0
+    "loiter_reposition_tolerance": 1.0
+    "loiter_move_to_speed": 'standard'
 
     "yaw_p_gain": 0.3
     "yaw_i_gain": 0.0
