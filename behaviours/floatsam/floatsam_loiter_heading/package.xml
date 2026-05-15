@@ -10,7 +10,6 @@
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>smarc_msgs</depend>
-  <depend>smarc_control_msgs</depend>
   <depend>floatsam_msgs</depend>
 
   <export>

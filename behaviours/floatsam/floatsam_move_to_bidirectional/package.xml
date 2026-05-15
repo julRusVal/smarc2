@@ -3,7 +3,7 @@
 <package format="3">
   <name>floatsam_move_to_bidirectional</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Move to action server for FloatSam USV with bidirectional capability</description>
   <maintainer email="mannolorenzo421@gmail.com">lorenzo</maintainer>
   <license>MIT</license>
 
