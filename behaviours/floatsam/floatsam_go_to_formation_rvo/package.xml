@@ -4,7 +4,9 @@
   <name>floatsam_go_to_formation_rvo</name>
   <version>0.0.0</version>
   <description>go to formation with RVO</description>
-  <maintainer email="03alebassi@gmail.com">aleba</maintainer>
+  <maintainer email="fidf@kth.se">Filippo</maintainer>
+  <maintainer email="alebas@kth.se">Alessandro</maintainer>
+  <maintainer email="lmanno@kth.se">Lorenzo</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>

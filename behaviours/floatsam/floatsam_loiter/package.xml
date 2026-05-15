@@ -4,7 +4,9 @@
   <name>floatsam_loiter</name>
   <version>0.0.0</version>
   <description>Loiter action server for FloatSam USV</description>
-  <maintainer email="alebas@kth.se">lorenzo</maintainer>
+  <maintainer email="fidf@kth.se">Filippo</maintainer>
+  <maintainer email="alebas@kth.se">Alessandro</maintainer>
+  <maintainer email="lmanno@kth.se">Lorenzo</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
