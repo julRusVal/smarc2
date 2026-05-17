@@ -5,7 +5,6 @@ from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 
 from .floatsam_common import FloatSam
 from floatsam_msgs.srv import GetSafeVelocity
-from tf2_geometry_msgs import do_transform_pose_stamped
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
@@ -199,7 +198,7 @@ class RVOservice(Node):
     def _odometry_subscriptions(self):
         
         for robot_id in self.robot_ids:
-            odom_topic = f'/{self.robot_base_name}_{robot_id}/smarc/odom'
+            odom_topic = f'/{self.robot_base_name}_{robot_id}/smarc/odom_in_map'
             
             subscriber = self.create_subscription(
                 Odometry,
@@ -215,36 +214,19 @@ class RVOservice(Node):
 # --- msgs Callbacks --- #
     def _odom_callback(self, msg: Odometry, robot_id: int):
         """
-        Update robot position and velocity for RVO, explicitly casting to the GLOBAL shared map.
+        Update robot position and velocity for RVO from odom_in_map topic.
+        The odometry message is already in the map frame with position and velocity.
         """
         robot_name = f'{self.robot_base_name}_{robot_id}'
         
-        pose_in_odom = PoseStamped()
-        pose_in_odom.header = msg.header
-        pose_in_odom.pose = msg.pose.pose
-        velocity_in_odom = msg.twist.twist.linear
-
-        try:
-            odom_to_global_tf = self._floatsam._tf_buffer.lookup_transform(
-                self._floatsam.GLOBAL_MAP_FRAME,  
-                msg.header.frame_id,       
-                rclpy.time.Time()          
-            )
-        except Exception as e:
-            self.get_logger().warn(
-                f"[RVO {robot_name}] Waiting for TF: {msg.header.frame_id} -> {self._floatsam.GLOBAL_MAP_FRAME}",
-                throttle_duration_sec=2.0
-            )
-            return
-
-        try:
-            pose_in_global = do_transform_pose_stamped(pose_in_odom, odom_to_global_tf)
-        except Exception as e:
-            self.get_logger().error(f"Error transforming odom for RVO robot {robot_id}: {e}")
-            return
+        # Extract pose and velocity directly from the message (already in map frame)
+        pose_in_global = PoseStamped()
+        pose_in_global.header = msg.header
+        pose_in_global.pose = msg.pose.pose
+        velocity_in_global = msg.twist.twist.linear
         
         self._robot_positions[robot_name] = pose_in_global
-        self._robot_velocities[robot_name] = velocity_in_odom
+        self._robot_velocities[robot_name] = velocity_in_global
 
 
 def main(args=None):
