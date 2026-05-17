@@ -20,8 +20,10 @@ from std_msgs.msg import Float32, Bool
 from geographic_msgs.msg import GeoPoint
 from tf_transformations import euler_from_quaternion
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster, Buffer, TransformListener
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Twist
 from smarc_utilities.georef_utils import convert_latlon_to_utm
+
+from floatsam_controllers.floatsam_common import FloatSam
 
 
 class SmarcTopicsPublisher(Node):
@@ -39,10 +41,13 @@ class SmarcTopicsPublisher(Node):
             automatically_declare_parameters_from_overrides=True
         )
 
+
         self.robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
         self.use_sim = self.get_parameter("use_sim").get_parameter_value().bool_value
         self.thruster_limit = self.get_parameter("thruster_limit").get_parameter_value().double_value
         self.master_robot_name = self.get_parameter('master_floatsam').get_parameter_value().string_value
+
+        self.floatsam = FloatSam(self, self.robot_name, use_sim=self.use_sim)
 
         if self.thruster_limit <= 0.0:
             self.get_logger().warn('Parameter thruster_limit must be > 0. Falling back to 1000.0 RPM')
@@ -93,7 +98,7 @@ class SmarcTopicsPublisher(Node):
         self.raw_px4_y = 0.0
         self.odom_offset_x = 0.0
         self.odom_offset_y = 0.0
-        self.latest_px4_timestamp = 0  # <--- Added to track PX4 internal clock
+        self.latest_px4_timestamp = 0 
 
         self._actuator_motors_cls = None
 
@@ -102,6 +107,7 @@ class SmarcTopicsPublisher(Node):
         self.course_pub  = self.create_publisher(Float32, 'smarc/course', 10)
         self.speed_pub   = self.create_publisher(Float32, 'smarc/speed', 10)
         self.latlon_pub  = self.create_publisher(GeoPoint, 'smarc/latlon', 10)
+        self.odom_in_map_pub = self.create_publisher(Odometry, 'smarc/odom_in_map', 10)
 
         # Create subscribers and publishers from YAML config
         self._setup_topic_bridges()
@@ -592,14 +598,13 @@ class SmarcTopicsPublisher(Node):
         if msg.data:
             self.get_logger().warn('  LEAK DETECTED!')
 
+
     def _odom_callback(self, msg: VehicleLocalPosition):
         if self.use_sim:
             std_msg = msg
         else:
-            
             if not msg.xy_valid or msg.dead_reckoning:
                 self.get_logger().warn('PX4 Local Position INVALID (Dead Reckoning). Odometry will drift rapidly!', throttle_duration_sec=2.0)
-                # Removed the strict 'return' here so downstream nodes don't starve!
 
             if msg.xy_reset_counter != self.last_ekf_reset_counter:
                 self.get_logger().error(f'🚨 EKF ORIGIN RESET DETECTED! 🚨 PX4 shifted the local map! Counter: {self.last_ekf_reset_counter} -> {msg.xy_reset_counter}')
@@ -613,41 +618,29 @@ class SmarcTopicsPublisher(Node):
             std_msg.header.frame_id = f"{self.robot_name}/odom"
             std_msg.child_frame_id = f"{self.robot_name}/base_link"
             
-            # NED to ENU conversion
+            # NED to ENU conversion (Position)
             std_msg.pose.pose.position.x = self.raw_px4_x
             std_msg.pose.pose.position.y = self.raw_px4_y
             std_msg.pose.pose.position.z = float(-msg.z)
             
+            # NED to ENU conversion (Velocity - Note: This is in the ODOM frame, not base_link!)
             std_msg.twist.twist.linear.x = float(msg.vy)
             std_msg.twist.twist.linear.y = float(msg.vx)
             std_msg.twist.twist.linear.z = float(-msg.vz)
             
-            # # Heading to Quaternion (PX4 heading is math.pi/2 - ENU heading)
-            # enu_heading = math.pi / 2.0 - float(msg.heading)
-            # std_msg.pose.pose.orientation.w = math.cos(enu_heading / 2.0)
-            # std_msg.pose.pose.orientation.x = 0.0
-            # std_msg.pose.pose.orientation.y = 0.0
-            # std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
-
-            # HEADING INJECTION LOGIC
             if self.is_receiving_rtk_heading and not math.isnan(self.latest_rtk_heading_rad):
-                # Convert NED RTK heading to ENU Radian
                 enu_heading = (math.pi / 2.0) - self.latest_rtk_heading_rad
             else:
-                # Fallback to PX4 EKF heading (already converted from NED to ENU)
                 enu_heading = (math.pi / 2.0) - float(msg.heading)
 
-            # Wrap to [-pi, pi]
             enu_heading = math.atan2(math.sin(enu_heading), math.cos(enu_heading))
 
-            # Apply to Odometry message
             std_msg.pose.pose.orientation.w = math.cos(enu_heading / 2.0)
             std_msg.pose.pose.orientation.x = 0.0
             std_msg.pose.pose.orientation.y = 0.0
             std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
 
-            
-
+            # Broadcast ODOM -> BASE_LINK
             t_base = TransformStamped()
             t_base.header.stamp = std_msg.header.stamp
             t_base.header.frame_id = std_msg.header.frame_id
@@ -658,11 +651,12 @@ class SmarcTopicsPublisher(Node):
             t_base.transform.rotation = std_msg.pose.pose.orientation
             self.tf_broadcaster.sendTransform(t_base)
 
+            # Broadcast MAP -> ODOM
             if self.datum_is_set:
                 t_map = TransformStamped()
                 t_map.header.stamp = std_msg.header.stamp
                 t_map.header.frame_id = f"{self.robot_name}/map"
-                t_map.child_frame_id = f"{self.robot_name}/odom"
+                t_map.child_frame_id = std_msg.header.frame_id
                 t_map.transform.translation.x = float(self.odom_offset_x)
                 t_map.transform.translation.y = float(self.odom_offset_y)
                 t_map.transform.translation.z = 0.0
@@ -674,8 +668,49 @@ class SmarcTopicsPublisher(Node):
 
         self.latest_odom = std_msg
         self.odom_pub.publish(std_msg)
+
+        # ==========================================
+        # PURE MAP FRAME ODOMETRY
+        # ==========================================
+        try:
+            # Convert Position from Odom to Map
+            map_point = self.floatsam.convert_odom_point_to_map_point(
+                std_msg.pose.pose.position.x, 
+                std_msg.pose.pose.position.y, 
+                std_msg.pose.pose.position.z
+            )
+            
+            # Convert Velocity from Odom to Map
+            map_twist = self.floatsam.convert_twist_frame_to_frame(
+                std_msg.twist.twist,
+                source_frame=std_msg.header.frame_id,
+                target_frame=self.floatsam.LOCAL_MAP_FRAME
+            )
+            
+            # Build unified Odometry in map frame
+            odom_in_map = Odometry()
+            odom_in_map.header.stamp = std_msg.header.stamp
+            odom_in_map.header.frame_id = self.floatsam.LOCAL_MAP_FRAME
+            odom_in_map.child_frame_id = ""  # No child frame needed—everything is in map
+            
+            # Position in map frame
+            odom_in_map.pose.pose.position = map_point.point
+            odom_in_map.pose.pose.orientation.w = 1.0  # Identity rotation (map is fixed)
+            odom_in_map.pose.pose.orientation.x = 0.0
+            odom_in_map.pose.pose.orientation.y = 0.0
+            odom_in_map.pose.pose.orientation.z = 0.0
+            
+            # Velocity in map frame
+            odom_in_map.twist.twist = map_twist
+            
+            self.odom_in_map_pub.publish(odom_in_map)
+            
+        except Exception as e:
+            self.get_logger().debug(f'Could not compute odom_in_map (TF tree not ready): {e}')
+
         self._compute_and_publish_derived_odom(std_msg)
 
+    
     def _compute_and_publish_derived_odom(self, std_msg: Odometry):
         orientation_list = [
             std_msg.pose.pose.orientation.x,

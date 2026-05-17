@@ -2,8 +2,11 @@
 
 from rclpy.node import Node
 from rclpy.time import Time, Duration
+import numpy as np 
+from geometry_msgs.msg import PointStamped, Vector3Stamped, Twist
+from tf2_geometry_msgs import do_transform_point, do_transform_vector3
 
-from geometry_msgs.msg import PointStamped, PoseStamped, TransformStamped
+from geometry_msgs.msg import PointStamped, PoseStamped, TransformStamped, Twist, Quaternion
 from geographic_msgs.msg import GeoPoint
 from nav_msgs.msg import Odometry
 
@@ -11,6 +14,7 @@ from tf2_geometry_msgs import do_transform_pose_stamped
 from tf2_ros import Buffer, TransformListener
 
 from smarc_utilities.georef_utils import convert_latlon_to_utm, convert_utm_to_latlon
+
 
 class FloatSam():
     def __init__(self,
@@ -22,6 +26,7 @@ class FloatSam():
         self._floatsam_in_map : None | PoseStamped = None
         self.use_sim = use_sim
 
+
         if self.use_sim:
             self.GLOBAL_MAP_FRAME: str = 'unity_origin' 
             self.LOCAL_MAP_FRAME: str  = 'unity_origin' 
@@ -32,6 +37,7 @@ class FloatSam():
         self._tf_buffer : Buffer = Buffer()
         self._tf_listener : TransformListener = TransformListener(self._tf_buffer, self._node, spin_thread=True)
 
+        self.robot_name = robot_name
         odom_topic = f"/{robot_name}/smarc/odom"
         self._node.create_subscription(Odometry, odom_topic, self._odom_cb, 10)
         self._node.get_logger().info(f"[FloatSam] Subscribed to odometry: {odom_topic}")
@@ -135,3 +141,176 @@ class FloatSam():
         in_utm = do_transform_pose_stamped(in_map, tf_inv)
         in_utm.header.frame_id = self._utm_frame_cache
         return convert_utm_to_latlon(in_utm)
+
+
+    def convert_odom_point_to_geopoint(self, x: float, y: float, z: float = 0.0) -> GeoPoint:
+        in_odom = PoseStamped()
+        if self.use_sim:
+            in_odom.header.frame_id = "unity_origin"  
+        else:
+            in_odom.header.frame_id = f"{self.robot_name}/odom"  
+        in_odom.pose.position.x = float(x)
+        in_odom.pose.position.y = float(y)
+        in_odom.pose.position.z = float(z)
+
+        try:
+            odom_to_map_tf = self._tf_buffer.lookup_transform(
+                target_frame=self.LOCAL_MAP_FRAME,
+                source_frame=in_odom.header.frame_id,
+                time=Time(seconds=0),
+                timeout=Duration(seconds=1)
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to transform '{in_odom.header.frame_id}' -> '{self.LOCAL_MAP_FRAME}': {e}"
+            )
+
+        in_map = do_transform_pose_stamped(in_odom, odom_to_map_tf)
+        in_map.header.frame_id = self.LOCAL_MAP_FRAME
+
+        # Then reuse map -> geopoint logic
+        return self.convert_map_point_to_geopoint(
+            in_map.pose.position.x,
+            in_map.pose.position.y,
+            in_map.pose.position.z
+        )
+      
+
+    def convert_body_to_map_twist(self, twist_body: Twist, orientation: Quaternion) -> Twist:
+        """
+        Converts velocity from the local body frame (e.g., base_link) 
+        to the global map frame (e.g., unity_origin).
+        
+        :param twist_body: The Twist message containing surge/sway velocities.
+        :param orientation: The pose quaternion [x, y, z, w] representing the vehicle's current attitude.
+        """
+        # Extract linear velocity vector (Surge, Sway, Heave)
+        v_body = np.array([twist_body.linear.x, twist_body.linear.y, twist_body.linear.z])
+        
+        # Extract quaternion
+        quat = [orientation.x, orientation.y, orientation.z, orientation.w]
+        
+        # Apply forward rotation: Body -> Map
+        rotation = R.from_quat(quat)
+        v_map = rotation.apply(v_body)
+        
+        twist_map = Twist()
+        twist_map.linear.x = v_map[0]  # Global X (East)
+        twist_map.linear.y = v_map[1]  # Global Y (North)
+        twist_map.linear.z = v_map[2]  # Global Z (Up)
+        
+        # Angular velocity (roll/pitch/yaw rates) is typically treated as frame-independent
+        # when dealing with basic kinematics, so we pass it through directly.
+        twist_map.angular = twist_body.angular
+        
+        return twist_map
+
+    def convert_map_to_body_twist(self, twist_map: Twist, orientation: Quaternion) -> Twist:
+        """
+        Converts velocity from the global map frame (e.g., unity_origin) 
+        back into the local body frame (e.g., base_link).
+        """
+        # Extract linear velocity vector (East, North, Up)
+        v_map = np.array([twist_map.linear.x, twist_map.linear.y, twist_map.linear.z])
+        
+        # Extract quaternion
+        quat = [orientation.x, orientation.y, orientation.z, orientation.w]
+        
+    
+        rotation = R.from_quat(quat)
+        v_body = rotation.inv().apply(v_map)
+        
+        twist_body = Twist()
+        twist_body.linear.x = v_body[0]  
+        twist_body.linear.y = v_body[1] 
+        twist_body.linear.z = v_body[2]  
+        
+        twist_body.angular = twist_map.angular
+        
+        return twist_body
+    
+
+    def convert_odom_point_to_map_point(self, x: float, y: float, z: float = 0.0) -> PointStamped:
+        """Transforms a coordinate from the Odom frame to the Local Map frame using the live TF tree."""
+        in_odom = PointStamped()
+        in_odom.header.frame_id = self.GLOBAL_MAP_FRAME if self.use_sim else f"{self.robot_name}/odom"
+        in_odom.point.x = float(x)
+        in_odom.point.y = float(y)
+        in_odom.point.z = float(z)
+
+        try:
+            tf = self._tf_buffer.lookup_transform(
+                target_frame=self.LOCAL_MAP_FRAME,
+                source_frame=in_odom.header.frame_id,
+                time=Time(seconds=0),
+                timeout=Duration(seconds=1)
+            )
+            return do_transform_point(in_odom, tf)
+        except Exception as e:
+            self._node.get_logger().error(f"Failed to transform Odom->Map point: {e}")
+            raise
+
+    def convert_map_point_to_odom_point(self, x: float, y: float, z: float = 0.0) -> PointStamped:
+        """Transforms a coordinate from the Local Map frame to the Odom frame using the live TF tree."""
+        in_map = PointStamped()
+        in_map.header.frame_id = self.LOCAL_MAP_FRAME
+        in_map.point.x = float(x)
+        in_map.point.y = float(y)
+        in_map.point.z = float(z)
+
+        target_odom_frame = self.GLOBAL_MAP_FRAME if self.use_sim else f"{self.robot_name}/odom"
+
+        try:
+            tf = self._tf_buffer.lookup_transform(
+                target_frame=target_odom_frame,
+                source_frame=in_map.header.frame_id,
+                time=Time(seconds=0),
+                timeout=Duration(seconds=1)
+            )
+            return do_transform_point(in_map, tf)
+        except Exception as e:
+            self._node.get_logger().error(f"Failed to transform Map->Odom point: {e}")
+            raise
+
+
+    def convert_twist_frame_to_frame(self, twist_in: Twist, source_frame: str, target_frame: str) -> Twist:
+        """
+        Generalized velocity transformation using TF2. 
+        Because velocities are vectors (not points), TF2 will cleanly apply 
+        ONLY the rotation from the tree, ignoring RTK map translations!
+        """
+        try:
+            # Get the latest transform between the frames
+            tf = self._tf_buffer.lookup_transform(
+                target_frame=target_frame,
+                source_frame=source_frame,
+                time=Time(seconds=0),
+                timeout=Duration(seconds=1)
+            )
+        except Exception as e:
+            self._node.get_logger().error(f"Failed to transform Twist from {source_frame} to {target_frame}: {e}")
+            raise
+
+        lin_vec = Vector3Stamped()
+        lin_vec.vector = twist_in.linear
+        lin_rotated = do_transform_vector3(lin_vec, tf)
+
+        ang_vec = Vector3Stamped()
+        ang_vec.vector = twist_in.angular
+        ang_rotated = do_transform_vector3(ang_vec, tf)
+
+        twist_out = Twist()
+        twist_out.linear = lin_rotated.vector
+        twist_out.angular = ang_rotated.vector
+        
+        return twist_out
+
+    def convert_body_to_map_twist(self, twist_body: Twist) -> Twist:
+        source = f"{self.robot_name}/base_link"
+        target = self.LOCAL_MAP_FRAME
+        return self.convert_twist_frame_to_frame(twist_body, source, target)
+
+    def convert_map_to_body_twist(self, twist_map: Twist) -> Twist:
+        source = self.LOCAL_MAP_FRAME
+        target = f"{self.robot_name}/base_link"
+        return self.convert_twist_frame_to_frame(twist_map, source, target)
