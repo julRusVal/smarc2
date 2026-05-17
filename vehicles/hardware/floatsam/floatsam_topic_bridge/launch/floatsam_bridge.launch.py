@@ -32,6 +32,11 @@ def generate_launch_description():
         default_value='floatsam_usv_0',
         description='Name of the floatsam whose rtk position will be set as the /map frame center'
     )
+    num_of_robots_arg = DeclareLaunchArgument(
+        'num_of_robots',
+        default_value='1',
+        description='Number of robots in the fleet'
+    )
 
     config_dir = os.path.join(get_package_share_directory('floatsam_topic_bridge'), 'config')
 
@@ -52,6 +57,7 @@ def generate_launch_description():
                     'robot_name': LaunchConfiguration('robot_name'),
                     'thruster_limit': LaunchConfiguration('thruster_limit'),
                     'master_floatsam': LaunchConfiguration('master_floatsam'),
+                    'num_of_robots': LaunchConfiguration('num_of_robots'),
         }],
         arguments=['--ros-args', '--log-level', 'info']
     )
@@ -61,6 +67,7 @@ def generate_launch_description():
         robot_name_arg,
         thruster_limit_arg,
         master_floatsam_arg,
+        num_of_robots_arg,
         GroupAction([
             PushRosNamespace(LaunchConfiguration('robot_name')),
             smarc_topics_publisher_node,

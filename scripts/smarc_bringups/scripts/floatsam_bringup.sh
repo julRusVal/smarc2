@@ -19,7 +19,7 @@ USE_SIM_TIME="$SIM_TRUE"
 
 # --- Domain isolation + Public Square bridge config ---
 PUBLIC_DOMAIN=111
-NUM_ROBOTS=3
+NUM_ROBOTS=2
 
 if (( IDX >= NUM_ROBOTS )); then
     echo "Error: IDX ${IDX} is out of range for NUM_ROBOTS=${NUM_ROBOTS}"
@@ -183,7 +183,7 @@ tmux send-keys "ros2 launch str_json_mqtt_bridge waraps_bridge.launch broker_add
 # --- Topic bridge for floatsam ---
 tmux new-window -t "$SESSION:2" -n "topic_bridge"
 tmux select-window -t "$SESSION:2"
-tmux send-keys "ros2 launch floatsam_topic_bridge floatsam_bridge.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux send-keys "ros2 launch floatsam_topic_bridge floatsam_bridge.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE num_of_robots:=$NUM_ROBOTS" C-m
 
 # --- Controllers ---
 tmux new-window -t "$SESSION:3" -n "controllers"

@@ -8,6 +8,8 @@ import rclpy
 from rclpy.node import Node
 import math
 import importlib
+import json
+import paho.mqtt.client as mqtt
 from septentrio_gnss_driver.msg import AttEuler
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
@@ -46,7 +48,12 @@ class SmarcTopicsPublisher(Node):
         self.use_sim = self.get_parameter("use_sim").get_parameter_value().bool_value
         self.thruster_limit = self.get_parameter("thruster_limit").get_parameter_value().double_value
         self.master_robot_name = self.get_parameter('master_floatsam').get_parameter_value().string_value
+        self.num_of_robots = self.get_parameter('num_of_robots').get_parameter_value().integer_value
 
+        # Setup robot IDs for multi-agent coordination
+        self.robot_ids = range(self.num_of_robots)
+        self.robot_base_name = '_'.join(self.robot_name.split('_')[:-1])
+        
         self.floatsam = FloatSam(self, self.robot_name, use_sim=self.use_sim)
 
         if self.thruster_limit <= 0.0:
@@ -107,7 +114,32 @@ class SmarcTopicsPublisher(Node):
         self.course_pub  = self.create_publisher(Float32, 'smarc/course', 10)
         self.speed_pub   = self.create_publisher(Float32, 'smarc/speed', 10)
         self.latlon_pub  = self.create_publisher(GeoPoint, 'smarc/latlon', 10)
-        self.odom_in_map_pub = self.create_publisher(Odometry, 'smarc/odom_in_map', 10)
+        
+        # Best effort QoS for odom_in_map
+        best_effort_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        self.odom_in_map_pub = self.create_publisher(Odometry, 'smarc/odom_in_map', best_effort_qos)
+
+        # MQTT Configuration (placeholders)
+        self.mqtt_broker_ip = '172.20.10.2'  # TODO: Replace with your Mosquitto server IP
+        self.mqtt_broker_port = 1883           # TODO: Replace with your broker port if different
+        self.mqtt_client_id = f'floatsam_{self.robot_name}'
+        self.mqtt_odom_topic = f'{self.robot_name}/smarc/odom_in_map'  # Matches ROS topic structure
+        self.mqtt_client = None
+        self.mqtt_connected = False
+        
+        # Storage for other robots' odom publishers and MQTT subscriptions
+        self._other_robots_odom_pubs = {}
+        self._mqtt_subscriptions = {}
+        
+        # Initialize MQTT client
+        self._setup_mqtt_client()
+        
+        # Setup MQTT subscriptions for other robots' odometry
+        self._setup_mqtt_odom_subscriptions()
 
         # Create subscribers and publishers from YAML config
         self._setup_topic_bridges()
@@ -157,6 +189,193 @@ class SmarcTopicsPublisher(Node):
                 current_level = current_level[part]
             current_level[parts[-1]] = param.value
         return result
+
+    def _setup_mqtt_client(self):
+        """Initialize and connect the MQTT client for publishing odom_in_map."""
+        try:
+            self.mqtt_client = mqtt.Client(client_id=self.mqtt_client_id)
+            self.mqtt_client.on_connect = self._mqtt_on_connect
+            self.mqtt_client.on_disconnect = self._mqtt_on_disconnect
+            self.mqtt_client.on_publish = self._mqtt_on_publish
+            self.mqtt_client.on_message = self._mqtt_on_message
+            
+            self.get_logger().info(f'Connecting to MQTT broker at {self.mqtt_broker_ip}:{self.mqtt_broker_port}...')
+            self.mqtt_client.connect(self.mqtt_broker_ip, self.mqtt_broker_port, keepalive=60)
+            self.mqtt_client.loop_start()
+            
+        except Exception as e:
+            self.get_logger().error(f'Failed to initialize MQTT client: {e}')
+            self.mqtt_client = None
+
+    def _mqtt_on_connect(self, client, userdata, flags, rc):
+        """Callback for when the MQTT client connects."""
+        if rc == 0:
+            self.mqtt_connected = True
+            self.get_logger().info(f'MQTT client connected successfully.')
+            self.get_logger().info(f'  Publishing: {self.mqtt_odom_topic}')
+            # Subscribe to other robots' odometry topics
+            self._subscribe_to_mqtt_odom_topics()
+        else:
+            self.get_logger().error(f'MQTT connection failed with code {rc}')
+
+    def _mqtt_on_disconnect(self, client, userdata, rc):
+        """Callback for when the MQTT client disconnects."""
+        self.mqtt_connected = False
+        if rc != 0:
+            self.get_logger().warn(f'MQTT unexpected disconnection with code {rc}. Attempting to reconnect...')
+
+    def _mqtt_on_publish(self, client, userdata, mid):
+        """Callback for when a message is published to MQTT."""
+        pass  # Silent callback to avoid log spam
+
+    def _mqtt_on_message(self, client, userdata, msg):
+        """Callback for incoming MQTT messages (odometry from other robots)."""
+        try:
+            # Parse the topic to extract robot name
+            # Expected format: <robot_name>/smarc/odom_in_map
+            topic_parts = msg.topic.split('/')
+            if len(topic_parts) >= 3 and topic_parts[1] == 'smarc' and topic_parts[2] == 'odom_in_map':
+                robot_name = topic_parts[0]
+                
+                # Parse the incoming JSON odometry message
+                odom_dict = json.loads(msg.payload.decode('utf-8'))
+                
+                # Check if we have a publisher for this robot
+                if robot_name not in self._other_robots_odom_pubs:
+                    return
+                
+                # Reconstruct Odometry message from JSON
+                odom_msg = self._dict_to_odometry(odom_dict)
+                
+                # Republish to local ROS topic
+                self._other_robots_odom_pubs[robot_name].publish(odom_msg)
+                
+        except Exception as e:
+            self.get_logger().error(f'Failed to parse MQTT message from {msg.topic}: {e}', throttle_duration_sec=5.0)
+
+    def _publish_odom_to_mqtt(self, odom_msg: Odometry):
+        """Convert and publish Odometry message to MQTT broker as JSON."""
+        if self.mqtt_client is None or not self.mqtt_connected:
+            return
+        
+        try:
+            # Convert Odometry message to JSON
+            odom_dict = {
+                'header': {
+                    'stamp': {
+                        'sec': odom_msg.header.stamp.sec,
+                        'nsec': odom_msg.header.stamp.nanosec
+                    },
+                    'frame_id': odom_msg.header.frame_id
+                },
+                'child_frame_id': odom_msg.child_frame_id,
+                'pose': {
+                    'position': {
+                        'x': float(odom_msg.pose.pose.position.x),
+                        'y': float(odom_msg.pose.pose.position.y),
+                        'z': float(odom_msg.pose.pose.position.z)
+                    },
+                    'orientation': {
+                        'w': float(odom_msg.pose.pose.orientation.w),
+                        'x': float(odom_msg.pose.pose.orientation.x),
+                        'y': float(odom_msg.pose.pose.orientation.y),
+                        'z': float(odom_msg.pose.pose.orientation.z)
+                    }
+                },
+                'twist': {
+                    'linear': {
+                        'x': float(odom_msg.twist.twist.linear.x),
+                        'y': float(odom_msg.twist.twist.linear.y),
+                        'z': float(odom_msg.twist.twist.linear.z)
+                    },
+                    'angular': {
+                        'x': float(odom_msg.twist.twist.angular.x),
+                        'y': float(odom_msg.twist.twist.angular.y),
+                        'z': float(odom_msg.twist.twist.angular.z)
+                    }
+                }
+            }
+            
+            # Publish to MQTT with best effort (QoS 0)
+            payload = json.dumps(odom_dict)
+            self.mqtt_client.publish(self.mqtt_odom_topic, payload, qos=0)
+            
+        except Exception as e:
+            self.get_logger().error(f'Failed to publish to MQTT: {e}', throttle_duration_sec=5.0)
+
+    def _setup_mqtt_odom_subscriptions(self):
+        """Create ROS publishers for receiving other robots' odometry via MQTT."""
+        best_effort_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        
+        for robot_id in self.robot_ids:
+            robot_name = f'{self.robot_base_name}_{robot_id}'
+            
+            # Skip the current robot
+            if robot_name == self.robot_name:
+                continue
+            
+            # Create a publisher for this robot's odometry in global namespace
+            pub = self.create_publisher(
+                Odometry,
+                f'/{robot_name}/smarc/odom_in_map',
+                best_effort_qos
+            )
+            self._other_robots_odom_pubs[robot_name] = pub
+            self.get_logger().info(f'Created MQTT->ROS bridge for {robot_name}/smarc/odom_in_map')
+
+    def _subscribe_to_mqtt_odom_topics(self):
+        """Subscribe to MQTT topics for all other robots' odometry."""
+        for robot_id in self.robot_ids:
+            robot_name = f'{self.robot_base_name}_{robot_id}'
+            
+            # Skip the current robot
+            if robot_name == self.robot_name:
+                continue
+            
+            # Subscribe to this robot's odometry topic on MQTT
+            mqtt_topic = f'{robot_name}/smarc/odom_in_map'
+            self.mqtt_client.subscribe(mqtt_topic)
+            self._mqtt_subscriptions[robot_name] = mqtt_topic
+            self.get_logger().info(f'Subscribed to MQTT topic: {mqtt_topic}')
+
+    def _dict_to_odometry(self, odom_dict):
+        """Convert a dictionary (from JSON) back to an Odometry message."""
+        from rclpy.time import Time
+        
+        odom_msg = Odometry()
+        
+        # Set header
+        odom_msg.header.stamp.sec = odom_dict['header']['stamp']['sec']
+        odom_msg.header.stamp.nanosec = odom_dict['header']['stamp']['nsec']
+        odom_msg.header.frame_id = odom_dict['header']['frame_id']
+        
+        # Set child frame ID
+        odom_msg.child_frame_id = odom_dict['child_frame_id']
+        
+        # Set pose
+        odom_msg.pose.pose.position.x = odom_dict['pose']['position']['x']
+        odom_msg.pose.pose.position.y = odom_dict['pose']['position']['y']
+        odom_msg.pose.pose.position.z = odom_dict['pose']['position']['z']
+        
+        odom_msg.pose.pose.orientation.w = odom_dict['pose']['orientation']['w']
+        odom_msg.pose.pose.orientation.x = odom_dict['pose']['orientation']['x']
+        odom_msg.pose.pose.orientation.y = odom_dict['pose']['orientation']['y']
+        odom_msg.pose.pose.orientation.z = odom_dict['pose']['orientation']['z']
+        
+        # Set twist
+        odom_msg.twist.twist.linear.x = odom_dict['twist']['linear']['x']
+        odom_msg.twist.twist.linear.y = odom_dict['twist']['linear']['y']
+        odom_msg.twist.twist.linear.z = odom_dict['twist']['linear']['z']
+        
+        odom_msg.twist.twist.angular.x = odom_dict['twist']['angular']['x']
+        odom_msg.twist.twist.angular.y = odom_dict['twist']['angular']['y']
+        odom_msg.twist.twist.angular.z = odom_dict['twist']['angular']['z']
+        
+        return odom_msg
 
     def _get_message_class(self, msg_type_str):
         """Dynamically import and return message class from string like 'std_msgs/Float32' or 'pkg/msg/Type'"""
@@ -704,6 +923,9 @@ class SmarcTopicsPublisher(Node):
             odom_in_map.twist.twist = map_twist
             
             self.odom_in_map_pub.publish(odom_in_map)
+            
+            # Publish to MQTT broker
+            self._publish_odom_to_mqtt(odom_in_map)
             
         except Exception as e:
             self.get_logger().debug(f'Could not compute odom_in_map (TF tree not ready): {e}')
