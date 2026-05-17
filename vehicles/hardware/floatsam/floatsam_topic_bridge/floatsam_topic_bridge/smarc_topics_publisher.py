@@ -36,6 +36,10 @@ class SmarcTopicsPublisher(Node):
     """
     
     def __init__(self):
+
+        ASKO_LAT = 58.8233
+        ASKO_LON = 17.6500
+
         # Tell ROS 2 to automatically accept all parameters passed from the YAML file
         super().__init__(
             'floatsam_smarc_topics_publisher',
@@ -712,33 +716,30 @@ class SmarcTopicsPublisher(Node):
 
         if not self.datum_is_set and not self.use_sim:
             try:
-                utm_point = convert_latlon_to_utm(geopoint)
-                self.datum_zone = utm_point.header.frame_id
+                asko_geopoint = GeoPoint()
+                asko_geopoint.latitude  = ASKO_LAT
+                asko_geopoint.longitude = ASKO_LON
+                asko_geopoint.altitude  = 0.0
 
-                if self.robot_name == self.master_robot_name:
-                    self.datum_utm_x = utm_point.point.x
-                    self.datum_utm_y = utm_point.point.y
-                    self.datum_is_set = True
-                    self._publish_static_transforms()
-                    self.get_logger().info(f"MASTER MAP ORIGIN LOCKED. Zone: {self.datum_zone} | X: {self.datum_utm_x:.2f} | Y: {self.datum_utm_y:.2f}")
-                else:
-                    try:
-                        tf = self.tf_buffer.lookup_transform(self.datum_zone, "map", rclpy.time.Time())
-                        master_utm_x = tf.transform.translation.x
-                        master_utm_y = tf.transform.translation.y
-                        self.datum_utm_x = master_utm_x   
-                        self.datum_utm_y = master_utm_y   
-                        self.local_map_offset_x = utm_point.point.x - master_utm_x
-                        self.local_map_offset_y = utm_point.point.y - master_utm_y
-                        self.datum_is_set = True
-                        self._publish_static_transforms()
-                        self.get_logger().info(f"SLAVE MAP LOCKED! Offset from Master -> X: {self.local_map_offset_x:.2f}m | Y: {self.local_map_offset_y:.2f}m")
-                    except Exception:
-                        self.get_logger().info(f"Waiting for Master ({self.master_robot_name}) to publish global map...", throttle_duration_sec=2.0)
-                        return
+                utm_point = convert_latlon_to_utm(asko_geopoint)
+                self.datum_zone  = utm_point.header.frame_id
+                self.datum_utm_x = utm_point.point.x
+                self.datum_utm_y = utm_point.point.y
+
+                # All robots share the same hardcoded origin — no master/slave logic needed
+                utm_self = convert_latlon_to_utm(geopoint)
+                self.local_map_offset_x = utm_self.point.x - self.datum_utm_x
+                self.local_map_offset_y = utm_self.point.y - self.datum_utm_y
+
+                self.datum_is_set = True
+                self._publish_static_transforms()
+                self.get_logger().info(
+                    f"MAP ORIGIN LOCKED to Askö. Zone: {self.datum_zone} | "
+                    f"X: {self.datum_utm_x:.2f} | Y: {self.datum_utm_y:.2f} | "
+                    f"Local offset -> X: {self.local_map_offset_x:.2f}m | Y: {self.local_map_offset_y:.2f}m"
+                )
             except Exception as e:
-                self.get_logger().error(f"Failed to set auto-datum: {e}")
-
+                self.get_logger().error(f"Failed to set Askö datum: {e}")
         # --- ADDED: Calculate the dynamic Map -> Odom offset ---
         if self.datum_is_set and not self.use_sim:
             try:
