@@ -26,15 +26,17 @@ class RVOservice(Node):
         self._robot_positions = {}
         self._robot_velocities = {}
         self._odometry_subscriptions()
-        
-        speed_samples = np.arange(-0.5, self.max_speed + 0.5, 0.5)  
-        self.velocity_sample = self.velocity_samples(speed_samples)
-        self.effective_safety_margin = 2 * self.safety_margin
-    
-    def compute_safe_velocity_callback(self, request, response):
-        # request.robot_id
-        # request.pref_velocity
 
+        self.effective_safety_margin = 2 * self.safety_margin
+
+    def compute_safe_velocity_callback(self, request, response):
+        """
+        request fields expected:
+            robot_id        : str
+            pref_velocity   : [vx, vy]   (desired Cartesian velocity)
+            goal_position   : [gx, gy]   (current navigation goal in map frame)
+                              If not provided / zero-length, goal-aware costs are skipped.
+        """
         self.this_robot_id = request.robot_id
         self.pref_velocity = request.pref_velocity
 
@@ -43,74 +45,117 @@ class RVOservice(Node):
         self.this_robot_position = np.array([this_robot_position.x, this_robot_position.y])
         self.this_robot_velocity = np.array([this_robot_velocity.x, this_robot_velocity.y])
 
-        # --- First check if the preferred velocity is safe against all robots ---
-        pref_velocity_vec = np.array(self.pref_velocity)  
-        pref_is_safe = True
-        for idx in self.robot_ids:
-            if f'{self.robot_base_name}_{idx}' == self.this_robot_name:
-                continue
-            robot_velocity = np.array([self._robot_velocities[f'{self.robot_base_name}_{idx}'].x,
-                                       self._robot_velocities[f'{self.robot_base_name}_{idx}'].y])
-            v_apex = (self.this_robot_velocity + robot_velocity) / 2
-            if self.is_in_cone(idx, v_apex, pref_velocity_vec):
-                self.get_logger().info('The DESIRED velocity is NOT safe')
-                pref_is_safe = False
-                break
+        goal = None
+        goal_direction_angle = None
+        if hasattr(request, 'goal_position') and len(request.goal_position) == 2:
+            goal = np.array(request.goal_position, dtype=float)
+            to_goal = goal - self.this_robot_position
+            dist_to_goal = np.linalg.norm(to_goal)
+            if dist_to_goal > 1e-3:
+                goal_direction_angle = np.arctan2(to_goal[1], to_goal[0])
+
+        pref_velocity_vec = np.array(self.pref_velocity, dtype=float)
+
+        speed_samples = np.arange(0.0, self.max_speed + self.speed_step, self.speed_step)
+        velocity_samples = self._build_velocity_samples(speed_samples, goal_direction_angle)
+
+        pref_is_safe = self._velocity_is_safe(pref_velocity_vec)
 
         if pref_is_safe:
             pref_speed = float(np.linalg.norm(pref_velocity_vec))
             pref_angle = float(np.arctan2(pref_velocity_vec[1], pref_velocity_vec[0]))
-
             response.safe_velocity = [pref_speed, pref_angle]
             response.success = True
             response.change = False
+            self.get_logger().info('Preferred velocity is safe – no change needed.')
             return response
 
-        # --- Search for the closest safe velocity sample ---
+        self.get_logger().info('Preferred velocity is NOT safe – searching for alternative.')
+
         best_velocity = None
-        best_distance = np.inf
+        best_cost = np.inf
 
-        for velocity in self.velocity_sample:
-            projected_velocity = np.array([velocity[0] * np.cos(velocity[1]), velocity[0] * np.sin(velocity[1])])
-            safe = True
-            for idx in self.robot_ids:
-                if f'{self.robot_base_name}_{idx}' == self.this_robot_name:
-                    continue
-                robot_velocity = np.array([self._robot_velocities[f'{self.robot_base_name}_{idx}'].x,
-                                           self._robot_velocities[f'{self.robot_base_name}_{idx}'].y])
-                v_apex = (self.this_robot_velocity + robot_velocity) / 2
-                if self.is_in_cone(idx, v_apex, projected_velocity):
-                    safe = False
-                    break
+        for v_polar in velocity_samples:
+            speed, angle = v_polar
+            v_cart = np.array([speed * np.cos(angle), speed * np.sin(angle)])
 
-            if not safe:
+            if not self._velocity_is_safe(v_cart):
                 continue
 
-            distance = np.linalg.norm(pref_velocity_vec - projected_velocity)
-            if distance < best_distance:
-                best_distance = distance
-                best_velocity = velocity
+            cost = self._velocity_cost(v_cart, pref_velocity_vec, goal)
+            if cost < best_cost:
+                best_cost = cost
+                best_velocity = v_polar
 
         if best_velocity is None:
             response.success = False
-            self.get_logger().warn('The COMPUTED velocity is NONE')
+            self.get_logger().warn('No safe velocity found – sending failure.')
             return response
-        
-        self.get_logger().info('The COMPUTED velocity is SAFE')
-        response.safe_velocity = best_velocity
-        response.success = True
-        response.change = True 
 
-        # response.safe_velocity = calculated_velocity
-        # response.success = True
+        self.get_logger().info(
+            f'Safe velocity found: speed={best_velocity[0]:.2f}  angle={np.degrees(best_velocity[1]):.1f}°')
+        response.safe_velocity = list(best_velocity)
+        response.success = True
+        response.change = True
         return response
-    
+
+
+    def _velocity_cost(self, v_cart, pref_velocity_vec, goal):
+        """
+        Combined cost that balances three objectives:
+
+        1. Deviation from preferred velocity   – keeps behaviour smooth.
+        2. Goal-progress reward                – ensures the robot still moves
+                                                 toward its destination after
+                                                 an avoidance manoeuvre.
+        3. Low-speed penalty                   – prevents the robot from
+                                                 "solving" avoidance by stopping.
+        """
+        deviation_cost = np.linalg.norm(pref_velocity_vec - v_cart)
+
+        progress_cost = 0.0
+        if goal is not None:
+            to_goal = goal - self.this_robot_position
+            to_goal_dist = np.linalg.norm(to_goal)
+            if to_goal_dist > 1e-3:
+                to_goal_unit = to_goal / to_goal_dist
+                progress = np.dot(v_cart, to_goal_unit)   
+                progress_cost = -progress                  
+
+        # 3. Low-speed penalty
+        speed = np.linalg.norm(v_cart)
+        stop_penalty = self.stop_penalty if speed < self.min_useful_speed else 0.0
+
+        return (self.w_deviation * deviation_cost
+                + self.w_goal    * progress_cost
+                + stop_penalty)
+
+
+    def _velocity_is_safe(self, v_cart):
+        """Return True if v_cart does not enter any VO cone."""
+        for idx in self.robot_ids:
+            robot_name = f'{self.robot_base_name}_{idx}'
+            if robot_name == self.this_robot_name:
+                continue
+            if robot_name not in self._robot_velocities:
+                continue
+            rv = self._robot_velocities[robot_name]
+            robot_velocity = np.array([rv.x, rv.y])
+            v_apex = (self.this_robot_velocity + robot_velocity) / 2.0
+            if self.is_in_cone(idx, v_apex, v_cart):
+                return False
+        return True
+
 
     def is_in_cone(self, idx, v_apex, projected_velocity):
-        position = self._robot_positions[f'{self.robot_base_name}_{idx}'].pose.position
+        robot_name = f'{self.robot_base_name}_{idx}'
+        if robot_name not in self._robot_positions:
+            return False
+
+        position = self._robot_positions[robot_name].pose.position
         position = np.array([position.x, position.y])
 
-        rp = position - self.this_robot_position  
+        rp = position - self.this_robot_position
         distance = np.linalg.norm(rp)
 
         if distance < 1e-6:
@@ -131,102 +176,137 @@ class RVOservice(Node):
             return False
 
         approach_speed = speed_rel * np.cos(theta)
+        if approach_speed <= 0.0:
+            return False
 
         distance_to_edge = distance - self.effective_safety_margin
-        
-
         if distance_to_edge <= 0:
             return True
 
         time_to_collision = distance_to_edge / approach_speed
-
         return time_to_collision < self.time_horizon
 
-        
+
     def compute_angle(self, vector1, vector2):
         norm1 = np.linalg.norm(vector1)
         norm2 = np.linalg.norm(vector2)
-        
         if norm1 < 1e-9 or norm2 < 1e-9:
-            return 0.0  
-            
-        dot_product = np.dot(vector1, vector2)
-        cos_theta = dot_product / (norm1 * norm2)
-        cos_theta = np.clip(cos_theta, -1.0, 1.0)
-        
+            return 0.0
+        cos_theta = np.clip(np.dot(vector1, vector2) / (norm1 * norm2), -1.0, 1.0)
         return np.arccos(cos_theta)
 
 
-    def velocity_samples(self, speed_samples):
-        num_angles = 120
-        angles = np.linspace(0, 2*np.pi, num_angles, endpoint=False)
 
-        velocity_samples = [
-            (speed, angle)
+    def _build_velocity_samples(self, speed_samples, goal_direction_angle=None):
+        """
+        Build a set of (speed, angle) samples.
+
+        Strategy
+        --------
+        * A coarse uniform grid covers the full circle so the robot is never
+          completely stuck.
+        * If a goal direction is known, a denser fan of samples is added in
+          the half-space facing the goal (±90°).  This biases the search
+          toward solutions that maintain progress.
+        * Speed 0 is included so the robot can stop if truly necessary, but
+          the cost function penalises it.
+        """
+        # Coarse uniform coverage
+        coarse_angles = np.linspace(0.0, 2.0 * np.pi, self.num_coarse_angles, endpoint=False)
+
+        if goal_direction_angle is not None:
+            # Dense fan toward goal
+            fine_angles = np.linspace(
+                goal_direction_angle - np.pi / 2.0,
+                goal_direction_angle + np.pi / 2.0,
+                self.num_fine_angles
+            )
+            all_angles = np.concatenate([coarse_angles, fine_angles])
+        else:
+            all_angles = coarse_angles
+
+        samples = [
+            (float(speed), float(angle))
             for speed in speed_samples
-            for angle in angles
+            for angle in all_angles
         ]
-        return velocity_samples
+        return samples
 
+    
 
-# --- Nodes parameters --- #
     def declare_node_parameters(self):
-        """Declare all configurable parameters for PIDs and mixer"""
         double_desc = ParameterDescriptor(type=ParameterType.PARAMETER_DOUBLE)
         string_desc = ParameterDescriptor(type=ParameterType.PARAMETER_STRING)
-        bool_desc = ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)
-        int_desc = ParameterDescriptor(type=ParameterType.PARAMETER_INTEGER)
-        self.declare_parameter("robot_name", "floatsam_usv_0", string_desc)
-        self.declare_parameter("use_sim", False, bool_desc)
-        self.declare_parameter("time_horizon", 0.5, double_desc)
-        self.declare_parameter("safety_margin", 0.5, double_desc)
-        self.declare_parameter("max_speed", 3.0, double_desc)
-        self.declare_parameter("update_rate", 0.0, double_desc)
-        self.declare_parameter("num_robots", 1, int_desc)
+        bool_desc   = ParameterDescriptor(type=ParameterType.PARAMETER_BOOL)
+        int_desc    = ParameterDescriptor(type=ParameterType.PARAMETER_INTEGER)
+
+        self.declare_parameter("robot_name",        "floatsam_usv_0", string_desc)
+        self.declare_parameter("use_sim",            False,            bool_desc)
+        self.declare_parameter("time_horizon",       0.5,              double_desc)
+        self.declare_parameter("safety_margin",      0.5,              double_desc)
+        self.declare_parameter("max_speed",          3.0,              double_desc)
+        self.declare_parameter("speed_step",         0.25,             double_desc)
+        self.declare_parameter("update_rate",        0.0,              double_desc)
+        self.declare_parameter("num_robots",         1,                int_desc)
+
+        self.declare_parameter("num_coarse_angles",  60,               int_desc)
+        self.declare_parameter("num_fine_angles",    60,               int_desc)
+
+        self.declare_parameter("w_deviation",        1.0,              double_desc)
+        self.declare_parameter("w_goal",             1.5,              double_desc)
+        self.declare_parameter("stop_penalty",       2.0,              double_desc)
+        self.declare_parameter("min_useful_speed",   0.1,              double_desc)
 
     def get_node_parameters(self):
-        self.this_robot_name = self.get_parameter("robot_name").get_parameter_value().string_value
-        self.use_sim = self.get_parameter("use_sim").get_parameter_value().bool_value
-        self.update_rate = self.get_parameter("update_rate").get_parameter_value().double_value
-        self.safety_margin = self.get_parameter("safety_margin").get_parameter_value().double_value
-        self.max_speed = self.get_parameter("max_speed").get_parameter_value().double_value
-        self.time_horizon = self.get_parameter("time_horizon").get_parameter_value().double_value
-        self.num_robot = self.get_parameter("num_robots").get_parameter_value().integer_value
-        self.robot_ids = range(self.num_robot)
-        self.robot_base_name = '_'.join(self.this_robot_name.split('_')[:-1])
-    
+        gp = self.get_parameter
+
+        self.this_robot_name  = gp("robot_name").get_parameter_value().string_value
+        self.use_sim          = gp("use_sim").get_parameter_value().bool_value
+        self.update_rate      = gp("update_rate").get_parameter_value().double_value
+        self.safety_margin    = gp("safety_margin").get_parameter_value().double_value
+        self.max_speed        = gp("max_speed").get_parameter_value().double_value
+        self.speed_step       = gp("speed_step").get_parameter_value().double_value
+        self.time_horizon     = gp("time_horizon").get_parameter_value().double_value
+        self.num_robot        = gp("num_robots").get_parameter_value().integer_value
+        self.robot_ids        = range(self.num_robot)
+        self.robot_base_name  = '_'.join(self.this_robot_name.split('_')[:-1])
+
+        # Sampling
+        self.num_coarse_angles = gp("num_coarse_angles").get_parameter_value().integer_value
+        self.num_fine_angles   = gp("num_fine_angles").get_parameter_value().integer_value
+
+        # Cost weights
+        self.w_deviation      = gp("w_deviation").get_parameter_value().double_value
+        self.w_goal           = gp("w_goal").get_parameter_value().double_value
+        self.stop_penalty     = gp("stop_penalty").get_parameter_value().double_value
+        self.min_useful_speed = gp("min_useful_speed").get_parameter_value().double_value
+
+    # -----------------------------------------------------------------------
+    # Odometry subscriptions & callbacks
+    # -----------------------------------------------------------------------
+
     def _odometry_subscriptions(self):
-        
         for robot_id in self.robot_ids:
             odom_topic = f'/{self.robot_base_name}_{robot_id}/smarc/odom_in_map'
-            
             subscriber = self.create_subscription(
                 Odometry,
                 odom_topic,
                 lambda msg, rid=robot_id: self._odom_callback(msg, rid),
                 10
             )
-            
             self._odom_subscribers[robot_id] = subscriber
             self.get_logger().info(f'Subscribed to {odom_topic}')
-    
 
-# --- msgs Callbacks --- #
     def _odom_callback(self, msg: Odometry, robot_id: int):
-        """
-        Update robot position and velocity for RVO from odom_in_map topic.
-        The odometry message is already in the map frame with position and velocity.
-        """
+        """Update position and velocity for a robot from its odometry topic."""
         robot_name = f'{self.robot_base_name}_{robot_id}'
-        
-        # Extract pose and velocity directly from the message (already in map frame)
+
         pose_in_global = PoseStamped()
         pose_in_global.header = msg.header
-        pose_in_global.pose = msg.pose.pose
-        velocity_in_global = msg.twist.twist.linear
-        
-        self._robot_positions[robot_name] = pose_in_global
-        self._robot_velocities[robot_name] = velocity_in_global
+        pose_in_global.pose   = msg.pose.pose
+
+        self._robot_positions[robot_name]  = pose_in_global
+        self._robot_velocities[robot_name] = msg.twist.twist.linear
 
 
 def main(args=None):
