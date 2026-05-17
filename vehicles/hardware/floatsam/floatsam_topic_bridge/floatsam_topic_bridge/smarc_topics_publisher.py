@@ -114,14 +114,16 @@ class SmarcTopicsPublisher(Node):
         self.course_pub  = self.create_publisher(Float32, 'smarc/course', 10)
         self.speed_pub   = self.create_publisher(Float32, 'smarc/speed', 10)
         self.latlon_pub  = self.create_publisher(GeoPoint, 'smarc/latlon', 10)
-        
-        # Best effort QoS for odom_in_map
-        best_effort_qos = QoSProfile(
+
+        # BEST_EFFORT QoS for odom_in_map and MQTT odom bridges.
+        # Any external subscriber to these topics MUST also use BEST_EFFORT.
+        self.odom_in_map_qos = QoSProfile(
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
-        self.odom_in_map_pub = self.create_publisher(Odometry, 'smarc/odom_in_map', best_effort_qos)
+        self.odom_in_map_pub = self.create_publisher(Odometry, 'smarc/odom_in_map', self.odom_in_map_qos)
 
         # MQTT Configuration (placeholders)
         self.mqtt_broker_ip = '172.20.10.2'  # TODO: Replace with your Mosquitto server IP
@@ -304,13 +306,8 @@ class SmarcTopicsPublisher(Node):
             self.get_logger().error(f'Failed to publish to MQTT: {e}', throttle_duration_sec=5.0)
 
     def _setup_mqtt_odom_subscriptions(self):
-        """Create ROS publishers for receiving other robots' odometry via MQTT."""
-        best_effort_qos = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=1
-        )
-        
+        """Create ROS publishers for receiving other robots' odometry via MQTT.
+        Uses odom_in_map_qos (BEST_EFFORT) to match the publisher on the other side."""
         for robot_id in self.robot_ids:
             robot_name = f'{self.robot_base_name}_{robot_id}'
             
@@ -318,11 +315,11 @@ class SmarcTopicsPublisher(Node):
             if robot_name == self.robot_name:
                 continue
             
-            # Create a publisher for this robot's odometry in global namespace
+            # BEST_EFFORT to match odom_in_map_qos
             pub = self.create_publisher(
                 Odometry,
                 f'/{robot_name}/smarc/odom_in_map',
-                best_effort_qos
+                self.odom_in_map_qos
             )
             self._other_robots_odom_pubs[robot_name] = pub
             self.get_logger().info(f'Created MQTT->ROS bridge for {robot_name}/smarc/odom_in_map')
@@ -675,7 +672,6 @@ class SmarcTopicsPublisher(Node):
                 px4_gps.heading_accuracy = float('nan') # Tell EKF we don't have heading yet
                 
             px4_gps.satellites_used = 12
-		
 
             px4_gps.vel_m_s = 0.0
             px4_gps.vel_n_m_s = 0.0
