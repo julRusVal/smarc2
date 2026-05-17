@@ -26,12 +26,10 @@ class HaveGoal(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("robot_assignments", access=py_trees.common.Access.READ)
 
     def setup(self, **kwargs):
-        """Called once when the tree is created."""
         self.node = kwargs['node']
         self.node.get_logger().info(f"{self.name}: Setup complete.")
 
     def update(self):
-        """Check if formation points exist and assignments have been made."""
         if not hasattr(self.blackboard, 'formation_points') or self.blackboard.formation_points is None:
             self.node.get_logger().info(f"{self.name}: No formation points received")
             return py_trees.common.Status.FAILURE
@@ -62,7 +60,6 @@ class HungarianAssignment(py_trees.behaviour.Behaviour):
         self.node.get_logger().info(f"{self.name}: Setup complete.")
 
     def update(self):
-        """Execute Hungarian assignment algorithm."""
         if not hasattr(self.blackboard, 'formation_points'):
             self.node.get_logger().info(f"{self.name}: The formation points are not available yet")
             return py_trees.common.Status.RUNNING
@@ -82,7 +79,6 @@ class HungarianAssignment(py_trees.behaviour.Behaviour):
                 self.node.get_logger().info(f"{self.name}: {robot_key} assigned to goal_{task_idx}")
                 self.blackboard.robot_assignments[robot_key] = f'goal_{task_idx}'
 
-            
             return py_trees.common.Status.SUCCESS
         
         except Exception as e:
@@ -95,7 +91,6 @@ class HungarianAssignment(py_trees.behaviour.Behaviour):
         for i, name in enumerate(robot_names):
             for j in range(size):
                 cost_matrix[i][j] = self.compute_distance(robot_position=robot_positions[name], goal_position=formation_points[f'goal_{j}'])
-        
         return cost_matrix
     
     def compute_distance(self, robot_position, goal_position):
@@ -113,14 +108,11 @@ class ArrivalCheck(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("this_robot_arrived_flag", access=py_trees.common.Access.READ)
         self.this_robot_name = self.blackboard.this_robot_name
 
-
     def setup(self, **kwargs):
-        """Called once when the tree is created."""
         self.node = kwargs['node']
         self.node.get_logger().info(f"{self.name}: Setup complete.")
 
     def update(self):
-        """Check if arrived at target."""
         self.node.get_logger().info(f"{self.name}: Update begin")
 
         if not hasattr(self.blackboard, 'this_robot_arrived_flag') or self.blackboard.this_robot_arrived_flag == False:
@@ -131,38 +123,30 @@ class ArrivalCheck(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.SUCCESS
 
 class MoveToClient(py_trees.behaviour.Behaviour):
-    """Action client that calls the move_to action server.
-
-    Sends the assigned formation goal as a move_to goal using the standard
-    waypoint dict format (latitude / longitude / tolerance + speed).
-    Collision avoidance is fully delegated to the RVO service running inside
-    the move_to server, so no collision-check leaves are needed in the tree.
-    """
+    """Action client that calls the move_to action server."""
 
     def __init__(self, name="MoveToClient"):
         super().__init__(name)
         self.blackboard = self.attach_blackboard_client(name=self.name)
-        self.blackboard.register_key("robot_assignments",           access=py_trees.common.Access.READ)
-        self.blackboard.register_key("robot_positions",             access=py_trees.common.Access.READ)
-        self.blackboard.register_key("formation_points",            access=py_trees.common.Access.READ)
-        self.blackboard.register_key("formation_points_latlon",     access=py_trees.common.Access.READ)
-        self.blackboard.register_key("this_robot_name",             access=py_trees.common.Access.READ)
-        self.blackboard.register_key("max_velocity",                access=py_trees.common.Access.READ)
-        self.blackboard.register_key("this_robot_arrived_flag",     access=py_trees.common.Access.WRITE)
-        self.blackboard.register_key("last_point_tolerance_move_path", access=py_trees.common.Access.READ)
+        self.blackboard.register_key("robot_assignments",               access=py_trees.common.Access.READ)
+        self.blackboard.register_key("robot_positions",                 access=py_trees.common.Access.READ)
+        self.blackboard.register_key("formation_points",                access=py_trees.common.Access.READ)
+        self.blackboard.register_key("formation_points_latlon",         access=py_trees.common.Access.READ)
+        self.blackboard.register_key("this_robot_name",                 access=py_trees.common.Access.READ)
+        self.blackboard.register_key("max_velocity",                    access=py_trees.common.Access.READ)
+        self.blackboard.register_key("this_robot_arrived_flag",         access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("last_point_tolerance_move_path",  access=py_trees.common.Access.READ)
 
         self._action_client = None
         self.blackboard.this_robot_arrived_flag = False
 
     def setup(self, **kwargs):
-        """Called once when the tree is set up. Creates the ROS action client."""
         self.node = kwargs['node']
         self._floatsam = kwargs['node']._floatsam
         self._action_client = ActionClient(self.node, BaseAction, 'move_to')
         self.node.get_logger().info(f"{self.name}: Setup complete.")
 
     def initialise(self):
-        """Reset state each time the BT enters this behaviour from a non-RUNNING state."""
         self._send_goal_future  = None
         self._get_result_future = None
         self._goal_handle       = None
@@ -210,7 +194,7 @@ class MoveToClient(py_trees.behaviour.Behaviour):
 
         if not self._goal_accepted:
             self.node.get_logger().info(f"{self.name}: Waiting for goal acceptance...")
-            if self._goal_done:  # rejected
+            if self._goal_done:
                 self.node.get_logger().info(f"{self.name}: Goal was rejected by the server")
                 return py_trees.common.Status.FAILURE
             return py_trees.common.Status.RUNNING
@@ -228,15 +212,11 @@ class MoveToClient(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
-        """Cancel the goal if the BT aborts this behaviour while it is running."""
         self.node.get_logger().info(f"{self.name}: Terminate called with new_status={new_status}")
         if self._goal_handle is not None and not self._goal_done:
             self._goal_handle.cancel_goal_async()
 
-    # ── Callbacks ────────────────────────────────────────────────────────────────
-
     def _feedback_cb(self, feedback_msg):
-        """Log feedback from move_to."""
         try:
             fb = json.loads(feedback_msg.feedback.feedback.data)
             self.node.get_logger().info(f"{self.name}: Feedback - {fb}")
@@ -262,77 +242,103 @@ class MoveToClient(py_trees.behaviour.Behaviour):
         if self._goal_succeeded:
             self.blackboard.this_robot_arrived_flag = True
 
+
 class AllArrivalCheck(py_trees.behaviour.Behaviour):
-    """Check if all agents in formation have arrived at their targets."""
-    
+    """
+    Check if ALL robots have reached their assigned formation goals.
+
+    For each robot the Euclidean distance between its current position
+    (from robot_positions, already in map frame) and its assigned goal
+    (from formation_points, also in map frame) is compared against
+    arrival_tolerance (default 1.0 m).  Returns SUCCESS only when
+    every robot is within tolerance.
+    """
+
     def __init__(self, name="AllArrivalCheck"):
         super().__init__(name)
         self.blackboard = self.attach_blackboard_client(name=self.name)
-        self.blackboard.register_key("robot_positions", access=py_trees.common.Access.READ)
+        self.blackboard.register_key("robot_positions",   access=py_trees.common.Access.READ)
         self.blackboard.register_key("robot_assignments", access=py_trees.common.Access.READ)
-        self.blackboard.register_key("loiter_heading_fb", access=py_trees.common.Access.READ)
+        self.blackboard.register_key("formation_points",  access=py_trees.common.Access.READ)
+        self.blackboard.register_key("arrival_tolerance", access=py_trees.common.Access.READ)
 
     def setup(self, **kwargs):
-        """Called once when the tree is created."""
         self.node = kwargs['node']
         self.node.get_logger().info(f"{self.name}: Setup complete.")
 
     def update(self):
-        """Check if all agents have arrived."""
+        robot_positions  = self.blackboard.robot_positions
+        robot_assignments = self.blackboard.robot_assignments
+        formation_points = self.blackboard.formation_points
+        tolerance        = self.blackboard.arrival_tolerance  # metres
 
-        all_arrived_flag = True
-        for robot_name, ready in self.blackboard.loiter_heading_fb.items():
-            self.node.get_logger().info(f"{self.name}: Loiter feedback for {robot_name} = {ready}")
-            if ready == 0 or ready == None:
-                all_arrived_flag = False
-                break
+        if not robot_assignments:
+            self.node.get_logger().info(f"{self.name}: No assignments yet.")
+            return py_trees.common.Status.FAILURE
 
+        for robot_name, goal_key in robot_assignments.items():
+            # --- position ---
+            pose = robot_positions.get(robot_name)
+            if pose is None:
+                self.node.get_logger().info(
+                    f"{self.name}: No position for {robot_name} yet.")
+                return py_trees.common.Status.FAILURE
 
+            robot_xy = np.array([pose.pose.position.x, pose.pose.position.y])
 
-        if all_arrived_flag:
-            self.node.get_logger().info(f"{self.name}: All robots have arrived at their targets!")
-            return py_trees.common.Status.SUCCESS   
-        else: 
-            self.node.get_logger().info(f"{self.name}: NOT all robots have arrived at their targets yet!")
-            return py_trees.common.Status.FAILURE  
+            # --- goal ---
+            goal_xy = formation_points.get(goal_key)
+            if goal_xy is None:
+                self.node.get_logger().info(
+                    f"{self.name}: No formation point for {goal_key}.")
+                return py_trees.common.Status.FAILURE
+
+            goal_xy = np.array(goal_xy)
+
+            # --- distance check ---
+            distance = float(np.linalg.norm(robot_xy - goal_xy))
+            self.node.get_logger().info(
+                f"{self.name}: {robot_name} → {goal_key}  dist={distance:.2f}m  tol={tolerance:.2f}m")
+
+            if distance > tolerance:
+                self.node.get_logger().info(
+                    f"{self.name}: {robot_name} has NOT arrived yet ({distance:.2f}m > {tolerance:.2f}m).")
+                return py_trees.common.Status.FAILURE
+
+        self.node.get_logger().info(
+            f"{self.name}: All robots have arrived within {tolerance:.2f}m!")
+        return py_trees.common.Status.SUCCESS
+
 
 class LoiterWithHeadingClient(py_trees.behaviour.Behaviour):
-    """Action client to call loiter_with_heading action server.
-    
-    Loiters at the current position with a specified heading for a given duration.
-    Duration: 400 seconds
-    Heading: extracted from the formation goal assigned to this robot
-    """
+    """Action client to call loiter_with_heading action server."""
     
     def __init__(self, name="LoiterWithHeadingClient"):
         super().__init__(name)
         self.blackboard = self.attach_blackboard_client(name=self.name)
-        self.blackboard.register_key("this_robot_name", access=py_trees.common.Access.READ)
-        self.blackboard.register_key("robot_assignments", access=py_trees.common.Access.READ)
+        self.blackboard.register_key("this_robot_name",         access=py_trees.common.Access.READ)
+        self.blackboard.register_key("robot_assignments",       access=py_trees.common.Access.READ)
         self.blackboard.register_key("formation_points_latlon", access=py_trees.common.Access.READ)
         self._action_client = None
 
     def setup(self, **kwargs):
-        """Called once when the tree is created. Initialize action client."""
         self.node = kwargs['node']
         self._action_client = ActionClient(self.node, BaseAction, 'loiter_heading')
         self.node.get_logger().info(f"{self.name}: Setup complete.")
 
     def initialise(self):
-        """Reset state each time the BT enters this behaviour from a non-RUNNING state."""
-        self._send_goal_future = None
+        self._send_goal_future  = None
         self._get_result_future = None
-        self._goal_handle = None
-        self._goal_accepted = False
-        self._goal_done = False
-        self._goal_succeeded = False
+        self._goal_handle       = None
+        self._goal_accepted     = False
+        self._goal_done         = False
+        self._goal_succeeded    = False
 
     def update(self):
-        """Send goal to loiter_with_heading action server and manage action lifecycle."""
         self.node.get_logger().info(f"{self.name}: Update begin")
         
         if self._send_goal_future is None:
-            my_name = self.blackboard.this_robot_name
+            my_name     = self.blackboard.this_robot_name
             assignments = self.blackboard.robot_assignments
             
             if my_name not in assignments:
@@ -347,42 +353,34 @@ class LoiterWithHeadingClient(py_trees.behaviour.Behaviour):
                 return py_trees.common.Status.FAILURE
             
             goal_data = formation_points_latlon[my_goal_key]
-            heading = goal_data.get('heading', 0.0)
+            heading   = goal_data.get('heading', 0.0)
             
             if not self._action_client.wait_for_server(timeout_sec=2.0):
                 self.node.get_logger().warn(f"{self.name}: loiter_heading action server not available")
                 return py_trees.common.Status.FAILURE
             
-            goal_dict = {
-                'duration': 400,  
-                'heading': heading
-            }
-            goal_msg = BaseAction.Goal()
+            goal_dict = {'duration': 400, 'heading': heading}
+            goal_msg  = BaseAction.Goal()
             goal_msg.goal.data = json.dumps(goal_dict)
             
             self._send_goal_future = self._action_client.send_goal_async(
-                goal_msg,
-                feedback_callback=self._feedback_cb
+                goal_msg, feedback_callback=self._feedback_cb
             )
             self._send_goal_future.add_done_callback(self._goal_response_cb)
             self.node.get_logger().info(
-                f"{self.name}: Goal sent to loiter_heading "
-                f"(duration=400s, heading={heading}°)"
-            )
+                f"{self.name}: Goal sent to loiter_heading (duration=400s, heading={heading}°)")
             return py_trees.common.Status.RUNNING
         
         if not self._goal_accepted:
             self.node.get_logger().info(f"{self.name}: Waiting for goal acceptance...")
-            if self._goal_done:  # rejected
+            if self._goal_done:
                 self.node.get_logger().info(f"{self.name}: Goal was rejected by the server")
                 return py_trees.common.Status.FAILURE
             return py_trees.common.Status.RUNNING
         
         if self._goal_done:
             self.node.get_logger().info(
-                f"{self.name}: Goal finished with status: "
-                f"{'SUCCEEDED' if self._goal_succeeded else 'FAILED'}"
-            )
+                f"{self.name}: Goal finished: {'SUCCEEDED' if self._goal_succeeded else 'FAILED'}")
             return (
                 py_trees.common.Status.SUCCESS
                 if self._goal_succeeded
@@ -392,15 +390,11 @@ class LoiterWithHeadingClient(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
-        """Cancel the goal if the BT aborts this behaviour while it is running."""
         self.node.get_logger().info(f"{self.name}: Terminate called with new_status={new_status}")
         if self._goal_handle is not None and not self._goal_done:
             self._goal_handle.cancel_goal_async()
 
-    # ── Callbacks ────────────────────────────────────────────────────────────────
-
     def _feedback_cb(self, feedback_msg):
-        """Parse JSON feedback from the loiter action server."""
         try:
             feedback_str = feedback_msg.feedback.feedback.data
             feedback = json.loads(feedback_str)
@@ -414,20 +408,18 @@ class LoiterWithHeadingClient(py_trees.behaviour.Behaviour):
             self.node.get_logger().warn(f"{self.name}: Failed to parse feedback: {e}")
 
     def _goal_response_cb(self, future):
-        """Handle goal response from action server."""
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.node.get_logger().error(f"{self.name}: Goal rejected by loiter_heading server")
             self._goal_done = True
             return
-        self._goal_handle = goal_handle
+        self._goal_handle   = goal_handle
         self._goal_accepted = True
         self._get_result_future = goal_handle.get_result_async()
         self._get_result_future.add_done_callback(self._result_cb)
 
     def _result_cb(self, future):
-        """Handle final result from action server."""
         self.node.get_logger().info(f"{self.name}: Goal result received")
         result = future.result().result
         self._goal_succeeded = result.success
-        self._goal_done = True
+        self._goal_done      = True

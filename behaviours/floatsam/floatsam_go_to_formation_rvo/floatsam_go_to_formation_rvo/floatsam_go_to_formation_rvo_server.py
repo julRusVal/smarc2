@@ -7,6 +7,8 @@ from rclpy.action import ActionServer
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from floatsam_controllers.floatsam_common import FloatSam
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
+
 
 
 import py_trees
@@ -47,10 +49,20 @@ class BTActionServer(Node):
 
         self.declare_parameter('last_point_tolerance_move_path', 0.5)
         self.last_point_tolerance_move_path = self.get_parameter('last_point_tolerance_move_path').value
+
+        self.declare_parameter('arrival_tolerance', 1.0)
+        self.arrival_tolerance = self.get_parameter('arrival_tolerance').value
         
         self.get_logger().info(f'Robot "{self.this_robot_name}" managing {len(self.robot_ids)} robots (base: "{self.robot_base_name}", IDs: {self.robot_ids})')
         
         self._setup_blackboard()
+
+        self.odom_in_map_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
         
         self._odom_subscribers = {}
         self._loiter_subscribers = {}
@@ -86,12 +98,6 @@ class BTActionServer(Node):
             self.get_logger().info(f'Subscribed to {loiter_topic}')
     
     def _loiter_callback(self, msg: FloatStamped, robot_id: int):
-        """Update loiter heading feedback in blackboard when received.
-        
-        The loiter_heading_fb value is either 1.0 (heading to loiter point)
-        or 0.0 (not heading to loiter point). This is stored in the blackboard
-        keyed by robot name, similar to robot positions.
-        """
         blackboard = py_trees.blackboard.Client(name="Server")
         blackboard.register_key(key="loiter_heading_fb", access=py_trees.common.Access.WRITE)
         
@@ -111,15 +117,17 @@ class BTActionServer(Node):
         blackboard.register_key(key="last_point_tolerance_move_path", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="loiter_heading_fb", access=py_trees.common.Access.WRITE)
         blackboard.register_key(key="max_velocity", access=py_trees.common.Access.WRITE)
+        blackboard.register_key(key="arrival_tolerance", access=py_trees.common.Access.WRITE)
         
         blackboard.robot_positions = {}
         blackboard.robot_assignments = {}
-        blackboard.formation_points={}
+        blackboard.formation_points = {}
         blackboard.this_robot_name = self.this_robot_name  
         blackboard.formation_points_latlon = {}
         blackboard.last_point_tolerance_move_path = self.last_point_tolerance_move_path
         blackboard.loiter_heading_fb = {}
         blackboard.max_velocity = self.max_velocity
+        blackboard.arrival_tolerance = self.arrival_tolerance
         
         for robot_id in self.robot_ids:
             blackboard.robot_positions[f'{self.robot_base_name}_{robot_id}'] = None
@@ -128,54 +136,33 @@ class BTActionServer(Node):
         self.get_logger().info('Blackboard initialized with robot_positions and robot_assignments')
 
     def _setup_odometry_subscriptions(self):
-        """Subscribe to odometry topic for each robot."""
+        """Subscribe to odom_in_map topic for each robot."""
         for robot_id in self.robot_ids:
-            odom_topic = f'/{self.robot_base_name}_{robot_id}/smarc/odom'
+            # Changed from /smarc/odom to /smarc/odom_in_map — positions are
+            # already expressed in the map frame, no TF lookup needed.
+            odom_topic = f'/{self.robot_base_name}_{robot_id}/smarc/odom_in_map'
             
             subscriber = self.create_subscription(
                 Odometry,
                 odom_topic,
                 lambda msg, rid=robot_id: self._odom_callback(msg, rid),
-                10
+                self.odom_in_map_qos
             )
             
             self._odom_subscribers[robot_id] = subscriber
             self.get_logger().info(f'Subscribed to {odom_topic}')
 
     def _odom_callback(self, msg: Odometry, robot_id: int):
-        """Update robot position in blackboard, explicitly casting to the GLOBAL shared map."""
+        """
+        Update robot position in blackboard directly from odom_in_map.
+        No TF lookup required — the message is already in the map frame.
+        """
         robot_name = f'{self.robot_base_name}_{robot_id}'
-        
-        pose_in_odom = PoseStamped()
-        pose_in_odom.header = msg.header
-        pose_in_odom.pose = msg.pose.pose
 
-        try:
-            # 100% LIVE LOOKUP to the GLOBAL Map. No caches.
-            # Sim: unity_origin -> unity_origin (Identity TF, resolves instantly)
-            # Real: robot_X/odom -> map (Traverses the Master/Slave TF tree)
-            odom_to_global_tf = self._floatsam._tf_buffer.lookup_transform(
-                self._floatsam.GLOBAL_MAP_FRAME,  
-                msg.header.frame_id,       
-                rclpy.time.Time()          
-            )
-        except Exception as e:
-            # If TF fails, the tree isn't ready (e.g. waiting for RTK lock). 
-            # We safely return and try again next tick.
-            self.get_logger().warn(
-                f"[{robot_name}] Waiting for TF: {msg.header.frame_id} -> {self._floatsam.GLOBAL_MAP_FRAME}",
-                throttle_duration_sec=2.0
-            )
-            return
+        pose_in_global = PoseStamped()
+        pose_in_global.header = msg.header
+        pose_in_global.pose   = msg.pose.pose
 
-        # Apply the transform
-        try:
-            pose_in_global = do_transform_pose_stamped(pose_in_odom, odom_to_global_tf)
-        except Exception as e:
-            self.get_logger().error(f"Error transforming odom for robot {robot_id}: {e}")
-            return
-
-        # Update the Blackboard
         blackboard = py_trees.blackboard.Client(name="Server")
         blackboard.register_key(key="robot_positions", access=py_trees.common.Access.WRITE)
         
@@ -221,26 +208,10 @@ class BTActionServer(Node):
         return tree
 
     def _on_goal_received(self, goal_request: dict) -> bool:
-        """
-        Parse and validate the formation goal.
-        
-        Expected format:
-        {
-            'formation_points': [
-                {'latitude': float, 'longitude': float, 'heading': float},
-                {'latitude': float, 'longitude': float, 'heading': float},
-                ...
-            ]
-        }
-        
-        heading: orientation in degrees (0-360)
-        """
         self.get_logger().info(f'Goal received: {goal_request}')
-    
 
         try:
             formation_points = goal_request.get('formation_points', None)
-            
             
             if formation_points is None:
                 self.get_logger().error("Missing 'formation_points' in goal request")
@@ -290,12 +261,12 @@ class BTActionServer(Node):
             for i, pt in enumerate(formation_points):
                 gp = GeoPoint(latitude=float(pt['latitude']), longitude=float(pt['longitude']), altitude=0.0)
                 pose = self._floatsam.convert_geopoint_to_map_pose_stamped(gp)
-                pt = [pose.pose.position.x, pose.pose.position.y]
-                new_formation_points[f'goal_{i}'] = pt
+                pt_xy = [pose.pose.position.x, pose.pose.position.y]
+                new_formation_points[f'goal_{i}'] = pt_xy
                 new_formation_points_latlon[f'goal_{i}'] = {
-                    'latitude': float(formation_points[i]['latitude']),
+                    'latitude':  float(formation_points[i]['latitude']),
                     'longitude': float(formation_points[i]['longitude']),
-                    'heading': float(formation_points[i]['heading'])
+                    'heading':   float(formation_points[i]['heading'])
                 }
 
             blackboard.formation_points = new_formation_points
@@ -308,18 +279,10 @@ class BTActionServer(Node):
             return False
 
     def _on_cancel_received(self) -> bool:
-        """Handle cancellation."""
         self.get_logger().info('Goal canceled')
         return True
 
     def _check_all_robots_have_positions(self, timeout_seconds=5.0) -> bool:
-        """
-        Check if all robots have valid position data.
-        Waits up to timeout_seconds for positions to arrive.
-        
-        Returns:
-            True if all robots have positions, False otherwise
-        """
         blackboard = py_trees.blackboard.Client(name="Server")
         blackboard.register_key(key="robot_positions", access=py_trees.common.Access.READ)
         
@@ -327,7 +290,6 @@ class BTActionServer(Node):
         
         while (time.time() - start_time) < timeout_seconds:
             robot_positions = blackboard.robot_positions
-            
             missing_robots = [rid for rid, pos in robot_positions.items() if pos is None]
             
             if len(missing_robots) == 0:
@@ -353,7 +315,6 @@ class BTActionServer(Node):
         return True
 
     def _prepare_loop(self) -> None:
-        """Create the tree once before loop starts."""
         self.get_logger().info('Building behavior tree...')
         
         if not self._check_all_robots_have_positions():
@@ -365,15 +326,6 @@ class BTActionServer(Node):
         self.get_logger().info('Behavior tree created successfully')
 
     def _loop_inner(self) -> bool | None:
-        """
-        Called at loop_frequency.
-        Tick tree once per call.
-
-        Returns:
-            True = SUCCESS (goal completed)
-            False = FAILURE (goal failed)
-            None = RUNNING (keep going)
-        """
         if self.tree is None:
             self.get_logger().error('Behavior tree was not created - aborting goal')
             return False  
@@ -390,7 +342,6 @@ class BTActionServer(Node):
             return None
 
     def _give_feedback(self) -> str:
-        """Return feedback string for the action client."""
         if self.tree:
             return f"Tree status: {self.tree.root.status}"
         return "Tree not initialized"
@@ -406,4 +357,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-

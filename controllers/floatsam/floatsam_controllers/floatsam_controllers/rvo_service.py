@@ -75,10 +75,10 @@ class RVOservice(Node):
             response.safe_velocity = [pref_speed, pref_angle]
             response.success = True
             response.change = False
-            self.get_logger().info('Preferred velocity is safe – no change needed.')
+            self.get_logger().info('Preferred velocity is safe – no change needed.', throttle_duration_sec=1.0)
             return response
 
-        self.get_logger().info('Preferred velocity is NOT safe – searching for alternative.')
+        self.get_logger().info('Preferred velocity is NOT safe – searching for alternative.', throttle_duration_sec=1.0)
 
         best_velocity = None
         best_cost = np.inf
@@ -101,7 +101,7 @@ class RVOservice(Node):
             return response
 
         self.get_logger().info(
-            f'Safe velocity found: speed={best_velocity[0]:.2f}  angle={np.degrees(best_velocity[1]):.1f}°')
+            f'Safe velocity found: speed={best_velocity[0]:.2f}  angle={np.degrees(best_velocity[1]):.1f}°', throttle_duration_sec=1.0)
         response.safe_velocity = list(best_velocity)
         response.success = True
         response.change = True

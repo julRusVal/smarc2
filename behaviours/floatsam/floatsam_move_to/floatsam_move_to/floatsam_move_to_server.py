@@ -348,6 +348,7 @@ class MoveToActionFloatSam():
         rvo_request = GetSafeVelocity.Request()
         rvo_request.robot_id = self._robot_name
         rvo_request.pref_velocity = [speed * np.cos(error_heading), speed * np.sin(error_heading)]
+        rvo_request.goal_position = [float(goal_position[0]), float(goal_position[1])]
 
         move_on_place_msg = Bool()
         move_on_place_msg.data = True 
@@ -369,14 +370,12 @@ class MoveToActionFloatSam():
 
             safe_speed = rvo_response.safe_velocity[0]
             safe_angle = rvo_response.safe_velocity[1]
-            #self._node.get_logger().warning(f'safe_speed:{safe_speed}, pref_velocity:{speed}', throttle_duration_sec=0.5)
-            #self._node.get_logger().warning(f'safe_angle:{safe_angle}, error_heading:{error_heading}', throttle_duration_sec=0.5)
             if rvo_response.change == True:
                 self._node.get_logger().warning(f'RVO changed the velocity', throttle_duration_sec=0.5)
                 self.rvo_invervents += 1
                 move_on_place_msg.data = False
         else:
-            self._node.get_logger().warning('RVO service not available, using preferred velocity directly')
+            self._node.get_logger().warning('RVO service not available, using preferred velocity directly', throttle_duration_sec=1.0)
             safe_speed = speed
             safe_angle = error_heading
 

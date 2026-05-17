@@ -85,5 +85,5 @@ ros2 launch floatsam_go_to_formation floatsam_go_to_formation_rvo.launch.py \
 
 You can activate the server and assign a mission using the ROS 2 CLI. The goal string must be a YAML representation containing the JSON payload. Ensure the number of coordinate sets exactly matches num_robots.
 
-#### Example: Five-Robot Formation Mission
+#### Example: Three-Robot Formation Mission
 ros2 action send_goal /floatsam_usv_0/go_to_formation_rvo smarc_msgs/action/BaseAction "{goal: {data: '{\"formation_points\": [{\"latitude\": 58.8408761736411, \"longitude\": 17.6513505304756, \"heading\": 90.0}, {\"latitude\": 58.8410112590599, \"longitude\": 17.6515537892541, \"heading\": 90.0}, {\"latitude\": 58.8409725040742, \"longitude\": 17.6519172840096, \"heading\": 90.0}]}'}}"
