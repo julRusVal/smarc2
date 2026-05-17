@@ -10,6 +10,8 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from smarc_msgs.msg import FloatStamped
 from floatsam_msgs.msg import Topics as FloatsamTopics
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
+
 
 
 class RVOservice(Node):
@@ -21,6 +23,12 @@ class RVOservice(Node):
         self.declare_node_parameters()
         self.get_node_parameters()
         self._floatsam = FloatSam(self, self.this_robot_name, use_sim=self.use_sim)
+        self.odom_in_map_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
 
         self._odom_subscribers = {}
         self._robot_positions = {}
@@ -292,7 +300,7 @@ class RVOservice(Node):
                 Odometry,
                 odom_topic,
                 lambda msg, rid=robot_id: self._odom_callback(msg, rid),
-                10
+                self.odom_in_map_qos
             )
             self._odom_subscribers[robot_id] = subscriber
             self.get_logger().info(f'Subscribed to {odom_topic}')
