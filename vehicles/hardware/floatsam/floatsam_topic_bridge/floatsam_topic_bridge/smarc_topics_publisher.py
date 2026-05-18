@@ -27,6 +27,8 @@ from smarc_utilities.georef_utils import convert_latlon_to_utm
 
 from floatsam_controllers.floatsam_common import FloatSam
 
+ASKO_LAT = 58.8233
+ASKO_LON = 17.6500
 
 class SmarcTopicsPublisher(Node):
     """
@@ -36,9 +38,6 @@ class SmarcTopicsPublisher(Node):
     """
     
     def __init__(self):
-
-        ASKO_LAT = 58.8233
-        ASKO_LON = 17.6500
 
         # Tell ROS 2 to automatically accept all parameters passed from the YAML file
         super().__init__(
@@ -105,6 +104,14 @@ class SmarcTopicsPublisher(Node):
         self.is_offboard = False
 
         self.last_ekf_reset_counter = 0
+        
+        # Message counters for debugging
+        self._msg_count_odom = 0
+        self._msg_count_gps_left = 0
+        self._msg_count_gps_right = 0
+        self._msg_count_rtk_pos = 0
+        self._msg_count_rtk_heading = 0
+        self._msg_count_imu = 0
         self.raw_px4_x = 0.0
         self.raw_px4_y = 0.0
         self.odom_offset_x = 0.0
@@ -130,8 +137,8 @@ class SmarcTopicsPublisher(Node):
         self.odom_in_map_pub = self.create_publisher(Odometry, 'smarc/odom_in_map', self.odom_in_map_qos)
 
         # MQTT Configuration (placeholders)
-        self.mqtt_broker_ip = '172.20.10.2'  # TODO: Replace with your Mosquitto server IP
-        self.mqtt_broker_port = 1883           # TODO: Replace with your broker port if different
+        self.mqtt_broker_ip = '20.240.40.232'  # TODO: Replace with your Mosquitto server IP
+        self.mqtt_broker_port = 1884           # TODO: Replace with your broker port if different
         self.mqtt_client_id = f'floatsam_{self.robot_name}'
         self.mqtt_odom_topic = f'{self.robot_name}/smarc/odom_in_map'  # Matches ROS topic structure
         self.mqtt_client = None
@@ -141,11 +148,30 @@ class SmarcTopicsPublisher(Node):
         self._other_robots_odom_pubs = {}
         self._mqtt_subscriptions = {}
         
+        # --- Auto-Datum Variables ---
+        self.datum_is_set = False
+        self.datum_utm_x = 0.0
+        self.datum_utm_y = 0.0
+        self.datum_zone = "utm"
+
+        # Multi-agent variables
+        self.local_map_offset_x = 0.0
+        self.local_map_offset_y = 0.0
+
         # Initialize MQTT client
         self._setup_mqtt_client()
         
         # Setup MQTT subscriptions for other robots' odometry
         self._setup_mqtt_odom_subscriptions()
+
+        # Initialize TF buffer and broadcasters BEFORE setting up topic bridges
+        # (GPS callbacks will immediately try to publish transforms)
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # TF Broadcasters
+        self.tf_broadcaster = TransformBroadcaster(self)
+        self.static_tf_broadcaster = StaticTransformBroadcaster(self)
 
         # Create subscribers and publishers from YAML config
         self._setup_topic_bridges()
@@ -163,24 +189,11 @@ class SmarcTopicsPublisher(Node):
             self.px4_qos
         )
 
-        # --- Auto-Datum Variables ---
-        self.datum_is_set = False
-        self.datum_utm_x = 0.0
-        self.datum_utm_y = 0.0
-        self.datum_zone = "utm"
-
-        # Multi-agent variables
-        self.local_map_offset_x = 0.0
-        self.local_map_offset_y = 0.0
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
-
-        # TF Broadcasters
-        self.tf_broadcaster = TransformBroadcaster(self)
-        self.static_tf_broadcaster = StaticTransformBroadcaster(self)
-
         self.get_logger().info(f'Floatsam SMaRC Topics Publisher started for: {self.robot_name}')
         self.control_loop_timer = self.create_timer(0.1, self._control_loop_callback)
+        
+        # Diagnostic timer to track message rates
+        self.diagnostic_timer = self.create_timer(5.0, self._diagnostic_callback)
 
     def _get_nested_params(self, prefix):
         result = {}
@@ -577,6 +590,26 @@ class SmarcTopicsPublisher(Node):
         self.offboard_mode_pub.publish(msg)
         self._publish_actuators()
 
+    def _diagnostic_callback(self):
+        """Runs every 5 seconds. Logs message reception rates for debugging."""
+        self.get_logger().info(
+            f"📊 Message rates (last 5s): "
+            f"Odom={self._msg_count_odom}, "
+            f"GPS_L={self._msg_count_gps_left}, "
+            f"GPS_R={self._msg_count_gps_right}, "
+            f"RTK_Pos={self._msg_count_rtk_pos}, "
+            f"RTK_Heading={self._msg_count_rtk_heading}, "
+            f"IMU={self._msg_count_imu}",
+            throttle_duration_sec=1.0
+        )
+        # Reset counters for next 5-second window
+        self._msg_count_odom = 0
+        self._msg_count_gps_left = 0
+        self._msg_count_gps_right = 0
+        self._msg_count_rtk_pos = 0
+        self._msg_count_rtk_heading = 0
+        self._msg_count_imu = 0
+
     def _gps_left_callback(self, msg):
         if self.use_sim:
             std_msg = msg
@@ -586,6 +619,7 @@ class SmarcTopicsPublisher(Node):
             std_msg.latitude  = float(msg.latitude_deg)
             std_msg.longitude = float(msg.longitude_deg)
             std_msg.altitude  = float(msg.altitude_msl_m)
+        self._msg_count_gps_left += 1
         self.latest_gps_left = std_msg
         self.gps_left_pub.publish(std_msg)
         self._publish_best_gps()
@@ -599,6 +633,7 @@ class SmarcTopicsPublisher(Node):
             std_msg.latitude  = float(msg.latitude_deg)
             std_msg.longitude = float(msg.longitude_deg)
             std_msg.altitude  = float(msg.altitude_msl_m)
+        self._msg_count_gps_right += 1
         self.latest_gps_right = std_msg
         self.gps_right_pub.publish(std_msg)
         self._publish_best_gps()
@@ -612,6 +647,7 @@ class SmarcTopicsPublisher(Node):
         heading = msg.heading
         if math.isnan(heading):
             return
+        self._msg_count_rtk_heading += 1
         if heading < 0.0:
             corrected_heading = - heading
         else:
@@ -628,6 +664,7 @@ class SmarcTopicsPublisher(Node):
         self.heading_pub.publish(heading_msg)
 
     def _rtk_position_callback(self, msg: NavSatFix):
+        self._msg_count_rtk_pos += 1
         self.latest_rtk_position = msg
         self.rtk_position_pub.publish(msg)
         self._publish_best_gps()
@@ -786,6 +823,7 @@ class SmarcTopicsPublisher(Node):
         self.static_tf_broadcaster.sendTransform(transforms_to_publish)
 
     def _imu_callback(self, msg):
+        self._msg_count_imu += 1
         if self.use_sim:
             std_msg = msg
         else:
@@ -816,6 +854,7 @@ class SmarcTopicsPublisher(Node):
 
 
     def _odom_callback(self, msg: VehicleLocalPosition):
+        self._msg_count_odom += 1
         if self.use_sim:
             std_msg = msg
         else:
@@ -889,24 +928,26 @@ class SmarcTopicsPublisher(Node):
         # PURE MAP FRAME ODOMETRY
         # ==========================================
         try:
-            # Convert Position from Odom to Map
-            map_point = self.floatsam.convert_odom_point_to_map_point(
+            # Convert Position from Odom to global Map
+            map_point = self.floatsam.convert_point_frame_to_frame(
                 std_msg.pose.pose.position.x, 
                 std_msg.pose.pose.position.y, 
-                std_msg.pose.pose.position.z
+                std_msg.pose.pose.position.z,
+                source_frame=std_msg.header.frame_id,
+                target_frame="map"  # Global map frame, shared across all robots
             )
             
-            # Convert Velocity from Odom to Map
+            # Convert Velocity from Odom to global Map
             map_twist = self.floatsam.convert_twist_frame_to_frame(
                 std_msg.twist.twist,
                 source_frame=std_msg.header.frame_id,
-                target_frame=self.floatsam.LOCAL_MAP_FRAME
+                target_frame="map"  # Global map frame, shared across all robots
             )
             
-            # Build unified Odometry in map frame
+            # Build unified Odometry in global map frame
             odom_in_map = Odometry()
             odom_in_map.header.stamp = std_msg.header.stamp
-            odom_in_map.header.frame_id = self.floatsam.LOCAL_MAP_FRAME
+            odom_in_map.header.frame_id = "map"  # Global map frame, not robot-specific
             odom_in_map.child_frame_id = ""  # No child frame needed—everything is in map
             
             # Position in map frame

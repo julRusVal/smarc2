@@ -228,10 +228,10 @@ class FloatSam():
         twist_body.angular = twist_map.angular
         
         return twist_body
-    
 
     def convert_odom_point_to_map_point(self, x: float, y: float, z: float = 0.0) -> PointStamped:
-        """Transforms a coordinate from the Odom frame to the Local Map frame using the live TF tree."""
+        """Transforms a coordinate from the Odom frame to the Local Map frame.
+        If TF tree is not ready, returns point in original frame until it becomes available."""
         in_odom = PointStamped()
         in_odom.header.frame_id = self.GLOBAL_MAP_FRAME if self.use_sim else f"{self.robot_name}/odom"
         in_odom.point.x = float(x)
@@ -247,11 +247,12 @@ class FloatSam():
             )
             return do_transform_point(in_odom, tf)
         except Exception as e:
-            self._node.get_logger().error(f"Failed to transform Odom->Map point: {e}")
-            raise
-
+            # TF tree not ready yet; return point in original frame as fallback
+            self._node.get_logger().debug(f"TF lookup not ready (Odom->Map): {e}", throttle_duration_sec=5.0)
+            return in_odom
     def convert_map_point_to_odom_point(self, x: float, y: float, z: float = 0.0) -> PointStamped:
-        """Transforms a coordinate from the Local Map frame to the Odom frame using the live TF tree."""
+        """Transforms a coordinate from the Local Map frame to the Odom frame.
+        If TF tree is not ready, returns point in original frame until it becomes available."""
         in_map = PointStamped()
         in_map.header.frame_id = self.LOCAL_MAP_FRAME
         in_map.point.x = float(x)
@@ -269,15 +270,41 @@ class FloatSam():
             )
             return do_transform_point(in_map, tf)
         except Exception as e:
-            self._node.get_logger().error(f"Failed to transform Map->Odom point: {e}")
-            raise
+            # TF tree not ready yet; return point in original frame as fallback
+            self._node.get_logger().debug(f"TF lookup not ready (Map->Odom): {e}", throttle_duration_sec=5.0)
+            return in_map
 
+    def convert_point_frame_to_frame(self, point_x: float, point_y: float, point_z: float, 
+                                     source_frame: str, target_frame: str) -> PointStamped:
+        """
+        Generalized point transformation between any two frames using TF2.
+        If TF tree is not ready, returns point in original frame until it becomes available.
+        """
+        in_point = PointStamped()
+        in_point.header.frame_id = source_frame
+        in_point.point.x = float(point_x)
+        in_point.point.y = float(point_y)
+        in_point.point.z = float(point_z)
+
+        try:
+            tf = self._tf_buffer.lookup_transform(
+                target_frame=target_frame,
+                source_frame=source_frame,
+                time=Time(seconds=0),
+                timeout=Duration(seconds=1)
+            )
+            return do_transform_point(in_point, tf)
+        except Exception as e:
+            # TF tree not ready yet; return point in original frame as fallback
+            self._node.get_logger().debug(f"TF lookup not ready (Point {source_frame}->{target_frame}): {e}", throttle_duration_sec=5.0)
+            return in_point
 
     def convert_twist_frame_to_frame(self, twist_in: Twist, source_frame: str, target_frame: str) -> Twist:
         """
         Generalized velocity transformation using TF2. 
         Because velocities are vectors (not points), TF2 will cleanly apply 
         ONLY the rotation from the tree, ignoring RTK map translations!
+        If TF tree is not ready, returns twist unchanged until it becomes available.
         """
         try:
             # Get the latest transform between the frames
@@ -288,8 +315,9 @@ class FloatSam():
                 timeout=Duration(seconds=1)
             )
         except Exception as e:
-            self._node.get_logger().error(f"Failed to transform Twist from {source_frame} to {target_frame}: {e}")
-            raise
+            # TF tree not ready yet; return twist unchanged as fallback
+            self._node.get_logger().debug(f"TF lookup not ready (Twist {source_frame}->{target_frame}): {e}", throttle_duration_sec=5.0)
+            return twist_in
 
         lin_vec = Vector3Stamped()
         lin_vec.vector = twist_in.linear
