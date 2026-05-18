@@ -32,7 +32,7 @@ class FloatSam():
             self.LOCAL_MAP_FRAME: str  = 'unity_origin' 
         else:
             self.GLOBAL_MAP_FRAME: str = 'map'
-            self.LOCAL_MAP_FRAME: str  = f"{robot_name}/map" 
+            self.LOCAL_MAP_FRAME: str  = "map" 
 
         self._tf_buffer : Buffer = Buffer()
         self._tf_listener : TransformListener = TransformListener(self._tf_buffer, self._node, spin_thread=True)
