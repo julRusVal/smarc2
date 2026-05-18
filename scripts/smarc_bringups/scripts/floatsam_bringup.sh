@@ -14,7 +14,7 @@ fi
 ROBOT_NAME="floatsam_usv_${IDX}"
 SESSION="${ROBOT_NAME}_bringup"
 
-SIM_TRUE=true
+SIM_TRUE=false
 USE_SIM_TIME="$SIM_TRUE"
 
 # --- Domain isolation + Public Square bridge config ---
