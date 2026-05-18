@@ -64,7 +64,7 @@ tmux select-layout -t "$SESSION:3" tiled
 tmux select-pane -t "$SESSION:3.0"
 tmux send-keys "ros2 launch floatsam_controllers floatsam_controllers_launch.py robot_name:=$ROBOT_NAME" C-m
 tmux select-pane -t "$SESSION:3.1"
-tmux send-keys "ros2 launch floatsam_controllers rvo_launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE num_robots:=$NUM_ROBOTS" C-m
+tmux send-keys "sleep 4 && ros2 launch floatsam_controllers rvo_launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE num_robots:=$NUM_ROBOTS" C-m
 
 # --- Servers / action servers ---
 tmux new-window -t "$SESSION:4" -n "servers"
@@ -74,23 +74,23 @@ tmux split-window -v -t "$SESSION:4.1"
 tmux split-window -v -t "$SESSION:4.0"
 
 tmux select-pane -t "$SESSION:4.0"
-tmux send-keys "ros2 launch floatsam_move_to floatsam_move_to.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux send-keys "sleep 5 && ros2 launch floatsam_move_to floatsam_move_to.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 tmux select-pane -t "$SESSION:4.1"
-tmux send-keys "ros2 run floatsam_loiter floatsam_loiter_action_server --ros-args -r __ns:=/$ROBOT_NAME -p robot_name:=$ROBOT_NAME -p loiter_move_to_speed:=fast -p use_sim:=$SIM_TRUE" C-m
+tmux send-keys "sleep 5 && ros2 run floatsam_loiter floatsam_loiter_action_server --ros-args -r __ns:=/$ROBOT_NAME -p robot_name:=$ROBOT_NAME -p loiter_move_to_speed:=fast -p use_sim:=$SIM_TRUE" C-m
 tmux select-pane -t "$SESSION:4.2"
-tmux send-keys "ros2 launch floatsam_move_to_path floatsam_move_to_path.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux send-keys "sleep 5 && ros2 launch floatsam_move_to_path floatsam_move_to_path.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 tmux select-pane -t "$SESSION:4.3"
-tmux send-keys "ros2 launch floatsam_loiter_heading floatsam_loiter_heading.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux send-keys "sleep 5 && ros2 launch floatsam_loiter_heading floatsam_loiter_heading.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 
 # --- Go_to_formation ---
 tmux new-window -t "$SESSION:5" -n "move-to_bidirectional"
 tmux select-window -t "$SESSION:5"
-tmux send-keys "ros2 launch floatsam_move_to_bidirectional floatsam_move_to_bidirectional.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux send-keys "sleep 5 && ros2 launch floatsam_move_to_bidirectional floatsam_move_to_bidirectional.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 
 # --- Go_to_formation_rvo ---
 tmux new-window -t "$SESSION:6" -n "go_to_formation_rvo"
 tmux select-window -t "$SESSION:6"
-tmux send-keys "ros2 launch floatsam_go_to_formation_rvo floatsam_go_to_formation_rvo.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux send-keys "sleep 5 && ros2 launch floatsam_go_to_formation_rvo floatsam_go_to_formation_rvo.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 
 # --- Behavior tree ---
 tmux new-window -t "$SESSION:7" -n "bt"
