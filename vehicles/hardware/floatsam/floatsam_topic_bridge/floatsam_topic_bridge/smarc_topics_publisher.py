@@ -799,16 +799,15 @@ class SmarcTopicsPublisher(Node):
         """Creates the permanent links for the shared multi-agent map"""
         transforms_to_publish = []
 
-        if self.robot_name == self.master_robot_name:
-            t_utm = TransformStamped()
-            t_utm.header.stamp = self.get_clock().now().to_msg()
-            t_utm.header.frame_id = self.datum_zone
-            t_utm.child_frame_id = "map"
-            t_utm.transform.translation.x = float(self.datum_utm_x)
-            t_utm.transform.translation.y = float(self.datum_utm_y)
-            t_utm.transform.translation.z = 0.0
-            t_utm.transform.rotation.w = 1.0
-            transforms_to_publish.append(t_utm)
+        t_utm = TransformStamped()
+        t_utm.header.stamp = self.get_clock().now().to_msg()
+        t_utm.header.frame_id = self.datum_zone
+        t_utm.child_frame_id = "map"
+        t_utm.transform.translation.x = float(self.datum_utm_x)
+        t_utm.transform.translation.y = float(self.datum_utm_y)
+        t_utm.transform.translation.z = 0.0
+        t_utm.transform.rotation.w = 1.0
+        transforms_to_publish.append(t_utm)
 
         t_global = TransformStamped()
         t_global.header.stamp = self.get_clock().now().to_msg()

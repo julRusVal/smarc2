@@ -74,6 +74,9 @@ class FloatSam():
         in_utm_pose.pose.position.z = gp.altitude  
 
         source_frame = in_utm.header.frame_id
+        tf = None
+        
+        # Try the frame from convert_latlon_to_utm first
         try:
             tf = self._tf_buffer.lookup_transform(
                 target_frame=self.LOCAL_MAP_FRAME,
@@ -82,20 +85,45 @@ class FloatSam():
                 timeout=Duration(seconds=1)
             )
         except Exception as e:
-            try:
-                tf = self._tf_buffer.lookup_transform(
-                    target_frame=self.LOCAL_MAP_FRAME,
-                    source_frame='utm_34_V',
-                    time=Time(seconds=0),
-                    timeout=Duration(seconds=1)
-                )
-            except Exception as e2:
+            # Try to find any available UTM frame, using cached value if available
+            if not hasattr(self, '_utm_frame_cache') or self._utm_frame_cache is None:
+                candidates = ['utm_33_V', 'utm', 'utm_34_V'] + [f'utm_{i}' for i in range(1, 61)]
+                for candidate in candidates:
+                    try:
+                        # Use longer timeout on first discovery
+                        tf = self._tf_buffer.lookup_transform(
+                            target_frame=self.LOCAL_MAP_FRAME,
+                            source_frame=candidate,
+                            time=Time(seconds=0),
+                            timeout=Duration(seconds=2)
+                        )
+                        self._utm_frame_cache = candidate
+                        source_frame = candidate
+                        break
+                    except Exception:
+                        continue
+            else:
+                # Use cached frame
+                try:
+                    tf = self._tf_buffer.lookup_transform(
+                        target_frame=self.LOCAL_MAP_FRAME,
+                        source_frame=self._utm_frame_cache,
+                        time=Time(seconds=0),
+                        timeout=Duration(seconds=1)
+                    )
+                    source_frame = self._utm_frame_cache
+                except Exception:
+                    # Cache might be stale, reset and try again
+                    self._utm_frame_cache = None
+                    raise
+            
+            if tf is None:
                 err_msg = (
                     f"Failed to find a transform from any UTM frame to '{self.LOCAL_MAP_FRAME}'. "
-                    f"Tried '{source_frame}' and 'utm'."
+                    f"Make sure the topic_bridge is running and has published the UTM->map transform."
                 )
                 self._node.get_logger().error(err_msg)
-                raise
+                raise RuntimeError(err_msg)
 
         in_map = do_transform_pose_stamped(in_utm_pose, tf)
         in_map.pose.position.z = gp.altitude  
