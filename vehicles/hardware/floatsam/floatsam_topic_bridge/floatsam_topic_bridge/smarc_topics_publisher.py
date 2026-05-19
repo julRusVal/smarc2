@@ -540,12 +540,12 @@ class SmarcTopicsPublisher(Node):
 
     def _port_cmd_callback(self, msg: Float32):
         raw = msg.data / self.thruster_limit
-        self.latest_port_cmd = max(-1.0, min(1.0, raw))
+        self.latest_port_cmd = max(-0.6, min(0.6, raw))
         self.last_cmd_time = self.get_clock().now()
 
     def _strb_cmd_callback(self, msg: Float32):
         raw = msg.data / self.thruster_limit
-        self.latest_strb_cmd = max(-1.0, min(1.0, raw))
+        self.latest_strb_cmd = max(-0.6, min(0.6, raw))
         self.last_cmd_time = self.get_clock().now()
 
     def _publish_actuators(self):

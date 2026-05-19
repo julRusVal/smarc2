@@ -80,17 +80,17 @@ class MoveToActionFloatSam():
         self._node.declare_parameter("yaw_p_gain", 0.3, double_desc)
         self._node.declare_parameter("yaw_i_gain", 0.0, double_desc)
         self._node.declare_parameter("yaw_d_gain", 0.1, double_desc)
-        self._node.declare_parameter("yaw_threshold", 0.5, double_desc)
+        self._node.declare_parameter("yaw_threshold", 0.4, double_desc)
 
-        self._node.declare_parameter("yawrate_p_gain", 300.0, double_desc)
+        self._node.declare_parameter("yawrate_p_gain", 400.0, double_desc)
         self._node.declare_parameter("yawrate_i_gain", 0.0, double_desc)
-        self._node.declare_parameter("yawrate_d_gain", 30.0, double_desc)
+        self._node.declare_parameter("yawrate_d_gain", 35.0, double_desc)
 
-        self._node.declare_parameter("velocity_p_gain", 500.0, double_desc)
-        self._node.declare_parameter("velocity_i_gain", 10.0, double_desc)
+        self._node.declare_parameter("velocity_p_gain", 200.0, double_desc)
+        self._node.declare_parameter("velocity_i_gain", 50.0, double_desc)
         self._node.declare_parameter("velocity_d_gain", 0.0, double_desc)
 
-        self._node.declare_parameter("goal_tolerance", 1.0, double_desc)
+        self._node.declare_parameter("goal_tolerance", 1.5, double_desc)
         self._node.declare_parameter("speed_threshold", 10.0, double_desc)
     
 

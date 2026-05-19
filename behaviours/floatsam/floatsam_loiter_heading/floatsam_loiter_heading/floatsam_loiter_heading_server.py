@@ -84,9 +84,9 @@ class LoiterActionFloatSam():
         self._node.declare_parameter('robot_name', 'floatsam_usv', string_desc)
 
         self._node.declare_parameter('loiter_tolerance', 5.0, double_desc)
-        self._node.declare_parameter('loiter_reposition_tolerance', 0.5, double_desc)
+        self._node.declare_parameter('loiter_reposition_tolerance', 1.5, double_desc)
         self._node.declare_parameter('loiter_move_to_speed', 'fast', string_desc)
-        self._node.declare_parameter('heading_tolerance', 5.0, double_desc)  
+        self._node.declare_parameter('heading_tolerance', 30.0, double_desc)  
 
         self._node.declare_parameter('yaw_p_gain', 0.3, double_desc)
         self._node.declare_parameter('yaw_i_gain', 0.0, double_desc)
@@ -95,10 +95,10 @@ class LoiterActionFloatSam():
 
         self._node.declare_parameter('yawrate_p_gain', 300.0, double_desc)
         self._node.declare_parameter('yawrate_i_gain', 0.0, double_desc)
-        self._node.declare_parameter('yawrate_d_gain', 30.0, double_desc)
+        self._node.declare_parameter('yawrate_d_gain', 35.0, double_desc)
 
-        self._node.declare_parameter('velocity_p_gain', 500.0, double_desc)
-        self._node.declare_parameter('velocity_i_gain', 10.0, double_desc)
+        self._node.declare_parameter('velocity_p_gain', 10.0, double_desc)
+        self._node.declare_parameter('velocity_i_gain', 5.0, double_desc)
         self._node.declare_parameter('velocity_d_gain', 0.0, double_desc)
         
     def get_node_parameters(self) -> None:
@@ -498,7 +498,10 @@ class LoiterActionFloatSam():
                 
             else:
                 self._node.get_logger().info('Within loiter tolerance, maintaining position')
-                self._publish_setpoints()
+                if not (self._position_reached and self._heading_reached):
+                    self._publish_setpoints()
+                else:
+                    self._node.get_logger().info('Inside circle with correct heading - not publishing setpoints')
             
             return None
 

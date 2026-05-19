@@ -92,7 +92,7 @@ class MoveToActionFloatSam():
         self._node.declare_parameter("velocity_i_gain", 10.0, double_desc)
         self._node.declare_parameter("velocity_d_gain", 0.0, double_desc)
 
-        self._node.declare_parameter("goal_tolerance", 1.0, double_desc)
+        self._node.declare_parameter("goal_tolerance", 1.5, double_desc)
         self._node.declare_parameter("speed_threshold", 10.0, double_desc)
     
     def get_node_parameters(self) -> None:
