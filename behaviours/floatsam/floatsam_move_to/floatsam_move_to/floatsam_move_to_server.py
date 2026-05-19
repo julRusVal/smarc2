@@ -79,9 +79,9 @@ class MoveToActionFloatSam():
         self._node.declare_parameter("use_sim", True, bool_desc)
         self._node.declare_parameter("robot_name", 'floatsam_usv', string_desc)
 
-        self._node.declare_parameter("yaw_p_gain", 0.3, double_desc)
+        self._node.declare_parameter("yaw_p_gain", 0.6, double_desc)
         self._node.declare_parameter("yaw_i_gain", 0.0, double_desc)
-        self._node.declare_parameter("yaw_d_gain", 0.1, double_desc)
+        self._node.declare_parameter("yaw_d_gain", 0.2, double_desc)
         self._node.declare_parameter("yaw_threshold", 0.5, double_desc)
 
         self._node.declare_parameter("yawrate_p_gain", 300.0, double_desc)

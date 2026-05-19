@@ -28,7 +28,7 @@ def generate_launch_description():
 
     last_point_tolerance_move_path_arg = DeclareLaunchArgument(
         'last_point_tolerance_move_path',
-        default_value='0.5',
+        default_value='1.0',
         description='Tolerance to consider the last point of the path reached (in meters)'
     )
     
