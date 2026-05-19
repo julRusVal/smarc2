@@ -251,11 +251,11 @@ class RVOservice(Node):
         self.declare_parameter("robot_name",        "floatsam_usv_0", string_desc)
         self.declare_parameter("use_sim",            False,            bool_desc)
         self.declare_parameter("time_horizon",       0.5,              double_desc)
-        self.declare_parameter("safety_margin",      20.0,              double_desc)
+        self.declare_parameter("safety_margin",      10.0,              double_desc)
         self.declare_parameter("max_speed",          3.0,              double_desc)
         self.declare_parameter("speed_step",         0.25,             double_desc)
         self.declare_parameter("update_rate",        0.0,              double_desc)
-        self.declare_parameter("num_robots",         1,                int_desc)
+        self.declare_parameter("num_robots",         2,                int_desc)
 
         self.declare_parameter("num_coarse_angles",  60,               int_desc)
         self.declare_parameter("num_fine_angles",    60,               int_desc)
