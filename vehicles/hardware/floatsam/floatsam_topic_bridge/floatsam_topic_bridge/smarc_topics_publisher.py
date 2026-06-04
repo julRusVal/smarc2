@@ -10,7 +10,7 @@ import math
 import importlib
 import json
 import paho.mqtt.client as mqtt
-from septentrio_gnss_driver.msg import AttEuler
+
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
 from px4_msgs.msg import OffboardControlMode, VehicleControlMode, VehicleThrustSetpoint, VehicleTorqueSetpoint, SensorGps, VehicleLocalPosition
@@ -432,17 +432,17 @@ class SmarcTopicsPublisher(Node):
             self.get_logger().info(f'  GPS Right: {sensors["gps_right"]["input_topic"]} → {sensors["gps_right"]["output_topic"]}')
 
         # RTK GPS (high precision)
-        if 'rtk_heading' in sensors:
-            msg_class = self._get_message_class(sensors['rtk_heading']['msg_type'])
-            if msg_class is None:
-                msg_class = AttEuler
-            if msg_class is not None:
-                self.create_subscription(msg_class, sensors['rtk_heading']['input_topic'],
-                                         self._rtk_heading_callback, 10)
-                self.rtk_heading_pub = self.create_publisher(Float32, sensors['rtk_heading']['output_topic'], 10)
-                self.get_logger().info(f'  RTK Heading: {sensors["rtk_heading"]["input_topic"]} → {sensors["rtk_heading"]["output_topic"]}')
-            else:
-                self.get_logger().error("Could not load AttEuler message class. Is septentrio_gnss_driver sourced?")
+        #if 'rtk_heading' in sensors:
+        #    msg_class = self._get_message_class(sensors['rtk_heading']['msg_type'])
+        #    if msg_class is None:
+        #        msg_class = AttEuler
+        #    if msg_class is not None:
+        #        self.create_subscription(msg_class, sensors['rtk_heading']['input_topic'],
+        #                                 self._rtk_heading_callback, 10)
+        #        self.rtk_heading_pub = self.create_publisher(Float32, sensors['rtk_heading']['output_topic'], 10)
+        #        self.get_logger().info(f'  RTK Heading: {sensors["rtk_heading"]["input_topic"]} → {sensors["rtk_heading"]["output_topic"]}')
+        #    else:
+        #        self.get_logger().error("Could not load AttEuler message class. Is septentrio_gnss_driver sourced?")
 
         if 'rtk_position' in sensors:
             msg_class = self._get_message_class(sensors['rtk_position']['msg_type'])
@@ -643,31 +643,35 @@ class SmarcTopicsPublisher(Node):
         self.latest_px4_timestamp = msg.timestamp
 
 
-    def _rtk_heading_callback(self, msg):
-        heading = msg.heading
-        if math.isnan(heading):
-            return
-        self._msg_count_rtk_heading += 1
-        if heading < 0.0:
-            corrected_heading = - heading
-        else:
-            corrected_heading = 360.0 - heading
-
-        self.is_receiving_rtk_heading = True
-        heading_rad = math.radians(corrected_heading)
-        if heading_rad > math.pi:
-            self.latest_rtk_heading_rad = heading_rad- 2 * math.pi
-        else:
-            self.latest_rtk_heading_rad = heading_rad
-        heading_msg = Float32()
-        heading_msg.data = float(corrected_heading) % 360.0
-        self.heading_pub.publish(heading_msg)
+    #def _rtk_heading_callback(self, msg):
+    #    heading = msg.heading
+    #    if math.isnan(heading):
+    #        return
+    #    self._msg_count_rtk_heading += 1
+    #    if heading < 0.0:
+    #        corrected_heading = - heading
+    #    else:
+    #        corrected_heading = 360.0 - heading
+#
+    #    self.is_receiving_rtk_heading = True
+    #    heading_rad = math.radians(corrected_heading)
+    #    if heading_rad > math.pi:
+    #        self.latest_rtk_heading_rad = heading_rad- 2 * math.pi
+    #    else:
+    #        self.latest_rtk_heading_rad = heading_rad
+    #    heading_msg = Float32()
+    #    heading_msg.data = float(corrected_heading) % 360.0
+    #    self.heading_pub.publish(heading_msg)
 
     def _rtk_position_callback(self, msg: NavSatFix):
         self._msg_count_rtk_pos += 1
         self.latest_rtk_position = msg
         self.rtk_position_pub.publish(msg)
         self._publish_best_gps()
+
+        heading_msg = Float32()
+        heading_msg.data = 70.0
+        self.heading_pub.publish(heading_msg)
 
         if not self.use_sim and hasattr(self, 'sensor_gps_pub'):
             px4_gps = SensorGps()

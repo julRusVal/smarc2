@@ -109,9 +109,14 @@ tmux new-window -t "$SESSION:9" -n "gps"
 tmux select-window -t "$SESSION:9"
 tmux split-window -h -t "$SESSION:9.0"
 tmux select-pane -t "$SESSION:9.0"
-tmux send-keys "ros2 launch septentrio_gnss_driver rover.launch.py ns:=$ROBOT_NAME" C-m
+
+tmux send-keys "ros2 launch ublox_gps ublox_gps_node-launch.py \
+ param_file:=$HOME/ublox/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml \
+  __ns:=/$ROBOT_NAME \
+  remappings:=[('/ublox_gps_node/fix', 'gpsfix')]" C-m
+
 tmux select-pane -t "$SESSION:9.1"
-tmux send-keys "str2str -in ntrip://cinnmon@gmail.com:none@rtk2go.com:2101/Tranholmen -out serial://ttyACM1:115200" C-m
+# If you need to run NTRIP later, you can add it here.
 
 # --- Logging ---
 tmux new-window -t "$SESSION:10" -n "logging"
@@ -124,3 +129,5 @@ if [[ -n "${TMUX:-}" ]]; then
 else
     tmux -2 attach-session -t "$SESSION"
 fi
+
+#+919869766869
