@@ -14,7 +14,7 @@ fi
 ROBOT_NAME="floatsam_usv_${IDX}"
 SESSION="${ROBOT_NAME}_bringup"
 
-SIM_TRUE=true
+SIM_TRUE=false
 USE_SIM_TIME="$SIM_TRUE"
 NUM_ROBOTS=2
 
@@ -110,11 +110,11 @@ tmux select-window -t "$SESSION:9"
 tmux split-window -h -t "$SESSION:9.0"
 tmux select-pane -t "$SESSION:9.0"
 
-tmux send-keys "ros2 launch ublox_gps ublox_gps_node-launch.py \
- param_file:=$HOME/ublox/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml \
-  __ns:=/$ROBOT_NAME \
-  remappings:=[('/ublox_gps_node/fix', 'gpsfix')]" C-m
+#tmux send-keys "ros2 launch ublox_gps ublox_gps_node-launch.py param_file:=/home/smarc2user/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml __ns:=$ROBOT_NAME remappings:=\"[('/ublox_gps_node/fix', 'gpsfix')]\"" C-m
+tmux send-keys "ros2 launch ublox_gps ublox_gps_namespace.launch robot_name:=$ROBOT_NAME" C-m
 
+#tmux send-keys "ros2 launch ublox_gps ublox_gps_node-launch.py param_file:=/home/smarc2user/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml __ns:=$ROBOT_NAME remappings:=\"[('/ublox_gps_node/fix', 'gpsfix')]\"" C-m
+#ros2 launch ublox_gps ublox_gps_node-launch.py param_file:=/home/smarc2user/ublox/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml __ns:=$ROBOT_NAME remappings:="[('/ublox_gps_node/fix', 'gpsfix')]"
 tmux select-pane -t "$SESSION:9.1"
 # If you need to run NTRIP later, you can add it here.
 
@@ -123,11 +123,9 @@ tmux new-window -t "$SESSION:10" -n "logging"
 tmux select-window -t "$SESSION:10"
 
 # Set default window and attach/switch
-tmux select-window -t "$SESSION:7"
+tmux select-window -t "$SESSION:9"
 if [[ -n "${TMUX:-}" ]]; then
     tmux switch-client -t "$SESSION"
 else
     tmux -2 attach-session -t "$SESSION"
 fi
-
-#+919869766869

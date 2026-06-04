@@ -664,6 +664,7 @@ class SmarcTopicsPublisher(Node):
     #    self.heading_pub.publish(heading_msg)
 
     def _rtk_position_callback(self, msg: NavSatFix):
+        self.get_logger().info("!!! THE CALLBACK JUST FIRED !!!")
         self._msg_count_rtk_pos += 1
         self.latest_rtk_position = msg
         self.rtk_position_pub.publish(msg)

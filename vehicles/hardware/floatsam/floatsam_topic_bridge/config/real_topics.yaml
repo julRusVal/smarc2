@@ -13,7 +13,7 @@
         msg_type: 'px4_msgs/SensorGps'
 
       rtk_position:
-        input_topic: 'gpsfix'  
+        input_topic: 'ublox_gps_node/fix'  
         output_topic: 'core/rtk_position'
         output_for_px4: 'fmu/in/sensor_gps' 
         msg_type: 'sensor_msgs/NavSatFix'
