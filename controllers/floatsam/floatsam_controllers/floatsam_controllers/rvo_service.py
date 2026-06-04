@@ -130,7 +130,6 @@ class RVOservice(Node):
                 progress = np.dot(v_cart, to_goal_unit)   
                 progress_cost = -progress                  
 
-        # 3. Low-speed penalty
         speed = np.linalg.norm(v_cart)
         stop_penalty = self.stop_penalty if speed < self.min_useful_speed else 0.0
 
@@ -219,11 +218,9 @@ class RVOservice(Node):
         * Speed 0 is included so the robot can stop if truly necessary, but
           the cost function penalises it.
         """
-        # Coarse uniform coverage
         coarse_angles = np.linspace(0.0, 2.0 * np.pi, self.num_coarse_angles, endpoint=False)
 
         if goal_direction_angle is not None:
-            # Dense fan toward goal
             fine_angles = np.linspace(
                 goal_direction_angle - np.pi / 2.0,
                 goal_direction_angle + np.pi / 2.0,
@@ -279,19 +276,15 @@ class RVOservice(Node):
         self.robot_ids        = range(self.num_robot)
         self.robot_base_name  = '_'.join(self.this_robot_name.split('_')[:-1])
 
-        # Sampling
         self.num_coarse_angles = gp("num_coarse_angles").get_parameter_value().integer_value
         self.num_fine_angles   = gp("num_fine_angles").get_parameter_value().integer_value
 
-        # Cost weights
         self.w_deviation      = gp("w_deviation").get_parameter_value().double_value
         self.w_goal           = gp("w_goal").get_parameter_value().double_value
         self.stop_penalty     = gp("stop_penalty").get_parameter_value().double_value
         self.min_useful_speed = gp("min_useful_speed").get_parameter_value().double_value
 
-    # -----------------------------------------------------------------------
     # Odometry subscriptions & callbacks
-    # -----------------------------------------------------------------------
 
     def _odometry_subscriptions(self):
         for robot_id in self.robot_ids:

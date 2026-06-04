@@ -14,7 +14,7 @@ fi
 ROBOT_NAME="floatsam_usv_${IDX}"
 SESSION="${ROBOT_NAME}_bringup"
 
-SIM_TRUE=false
+SIM_TRUE=true
 USE_SIM_TIME="$SIM_TRUE"
 NUM_ROBOTS=2
 
@@ -66,25 +66,27 @@ tmux send-keys "ros2 launch floatsam_controllers floatsam_controllers_launch.py 
 tmux select-pane -t "$SESSION:3.1"
 tmux send-keys "sleep 4 && ros2 launch floatsam_controllers rvo_launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE num_robots:=$NUM_ROBOTS" C-m
 
-# --- Servers / action servers ---
-tmux new-window -t "$SESSION:4" -n "servers"
+# --- move_to, move_to_path, loiter ---
+tmux new-window -t "$SESSION:4" -n "move_to_actions"
 tmux select-window -t "$SESSION:4"
 tmux split-window -h -t "$SESSION:4.0"
-tmux split-window -v -t "$SESSION:4.1"
 tmux split-window -v -t "$SESSION:4.0"
 
 tmux select-pane -t "$SESSION:4.0"
 tmux send-keys "sleep 5 && ros2 launch floatsam_move_to floatsam_move_to.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 tmux select-pane -t "$SESSION:4.1"
-tmux send-keys "sleep 5 && ros2 run floatsam_loiter floatsam_loiter_action_server --ros-args -r __ns:=/$ROBOT_NAME -p robot_name:=$ROBOT_NAME -p loiter_move_to_speed:=fast -p use_sim:=$SIM_TRUE" C-m
-tmux select-pane -t "$SESSION:4.2"
 tmux send-keys "sleep 5 && ros2 launch floatsam_move_to_path floatsam_move_to_path.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
-tmux select-pane -t "$SESSION:4.3"
-tmux send-keys "sleep 5 && ros2 launch floatsam_loiter_heading floatsam_loiter_heading.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux select-pane -t "$SESSION:4.2"
+tmux send-keys "sleep 5 && ros2 run floatsam_loiter floatsam_loiter_action_server --ros-args -r __ns:=/$ROBOT_NAME -p robot_name:=$ROBOT_NAME -p loiter_move_to_speed:=fast -p use_sim:=$SIM_TRUE" C-m
 
-# --- Go_to_formation ---
-tmux new-window -t "$SESSION:5" -n "move-to_bidirectional"
+# --- loiter_heading, move_to_bidirectional ---
+tmux new-window -t "$SESSION:5" -n "heading_bidir"
 tmux select-window -t "$SESSION:5"
+tmux split-window -h -t "$SESSION:5.0"
+
+tmux select-pane -t "$SESSION:5.0"
+tmux send-keys "sleep 5 && ros2 launch floatsam_loiter_heading floatsam_loiter_heading.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
+tmux select-pane -t "$SESSION:5.1"
 tmux send-keys "sleep 5 && ros2 launch floatsam_move_to_bidirectional floatsam_move_to_bidirectional.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 
 # --- Go_to_formation_rvo ---
@@ -92,26 +94,31 @@ tmux new-window -t "$SESSION:6" -n "go_to_formation_rvo"
 tmux select-window -t "$SESSION:6"
 tmux send-keys "sleep 5 && ros2 launch floatsam_go_to_formation_rvo floatsam_go_to_formation_rvo.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 
-# --- Behavior tree ---
-tmux new-window -t "$SESSION:7" -n "bt"
+# --- Go_in_formation ---
+tmux new-window -t "$SESSION:7" -n "go_in_formation"
 tmux select-window -t "$SESSION:7"
+tmux send-keys "sleep 4 && ros2 launch floatsam_go_in_formation floatsam_go_in_formation.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE num_robots:=$NUM_ROBOTS" C-m
+
+# --- Behavior tree ---
+tmux new-window -t "$SESSION:8" -n "bt"
+tmux select-window -t "$SESSION:8"
 tmux send-keys "ros2 launch wasp_bt wasp_bt.launch robot_name:=$ROBOT_NAME agent_type:=$AGENT_TYPE pulse_rate:=$PULSE_RATE use_sim_time:=$USE_SIM_TIME bt_log_mode:=$BT_LOG_MODE" C-m
 
 # --- GPS ---
-tmux new-window -t "$SESSION:8" -n "gps"
-tmux select-window -t "$SESSION:8"
-tmux split-window -h -t "$SESSION:8.0"
-tmux select-pane -t "$SESSION:8.0"
+tmux new-window -t "$SESSION:9" -n "gps"
+tmux select-window -t "$SESSION:9"
+tmux split-window -h -t "$SESSION:9.0"
+tmux select-pane -t "$SESSION:9.0"
 tmux send-keys "ros2 launch septentrio_gnss_driver rover.launch.py ns:=$ROBOT_NAME" C-m
-tmux select-pane -t "$SESSION:8.1"
+tmux select-pane -t "$SESSION:9.1"
 tmux send-keys "str2str -in ntrip://cinnmon@gmail.com:none@rtk2go.com:2101/Tranholmen -out serial://ttyACM1:115200" C-m
 
 # --- Logging ---
-tmux new-window -t "$SESSION:9" -n "logging"
-tmux select-window -t "$SESSION:9"
+tmux new-window -t "$SESSION:10" -n "logging"
+tmux select-window -t "$SESSION:10"
 
 # Set default window and attach/switch
-tmux select-window -t "$SESSION:6"
+tmux select-window -t "$SESSION:7"
 if [[ -n "${TMUX:-}" ]]; then
     tmux switch-client -t "$SESSION"
 else
