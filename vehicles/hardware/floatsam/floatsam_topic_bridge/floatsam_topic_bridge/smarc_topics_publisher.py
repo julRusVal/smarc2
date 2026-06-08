@@ -670,10 +670,6 @@ class SmarcTopicsPublisher(Node):
         self.rtk_position_pub.publish(msg)
         self._publish_best_gps()
 
-        heading_msg = Float32()
-        heading_msg.data = 70.0
-        self.heading_pub.publish(heading_msg)
-
         if not self.use_sim and hasattr(self, 'sensor_gps_pub'):
             px4_gps = SensorGps()
             
@@ -984,13 +980,23 @@ class SmarcTopicsPublisher(Node):
         ]
         _, _, yaw = euler_from_quaternion(orientation_list)
         heading_deg = math.degrees(yaw)
-        if heading_deg < 0:
-            heading_deg += 360.0
+        if heading_deg > 0:
+            correct_heading = heading_deg
+        else:
+            correct_heading = 360 + heading_deg
+        #if heading_deg < 0:
+        #    heading_deg += 360.0
 
-        if not self.is_receiving_rtk_heading:
-            heading_msg = Float32()
-            heading_msg.data = 90.0 - heading_deg
-            self.heading_pub.publish(heading_msg)
+        #heading_wrapped = heading_deg % 360.0
+
+        heading_msg = Float32()
+        heading_msg.data = correct_heading
+        self.heading_pub.publish(heading_msg)
+
+        #if not self.is_receiving_rtk_heading:
+        #    heading_msg = Float32()
+        #    heading_msg.data = 90.0 - heading_deg
+        #    self.heading_pub.publish(heading_msg)
 
         vx = std_msg.twist.twist.linear.x
         vy = std_msg.twist.twist.linear.y

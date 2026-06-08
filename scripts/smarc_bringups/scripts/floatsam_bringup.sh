@@ -110,13 +110,17 @@ tmux select-window -t "$SESSION:9"
 tmux split-window -h -t "$SESSION:9.0"
 tmux select-pane -t "$SESSION:9.0"
 
-#tmux send-keys "ros2 launch ublox_gps ublox_gps_node-launch.py param_file:=/home/smarc2user/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml __ns:=$ROBOT_NAME remappings:=\"[('/ublox_gps_node/fix', 'gpsfix')]\"" C-m
 tmux send-keys "ros2 launch ublox_gps ublox_gps_namespace.launch robot_name:=$ROBOT_NAME" C-m
 
-#tmux send-keys "ros2 launch ublox_gps ublox_gps_node-launch.py param_file:=/home/smarc2user/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml __ns:=$ROBOT_NAME remappings:=\"[('/ublox_gps_node/fix', 'gpsfix')]\"" C-m
-#ros2 launch ublox_gps ublox_gps_node-launch.py param_file:=/home/smarc2user/ublox/colcon_ws/src/ublox/ublox_gps/config/zed_f9p.yaml __ns:=$ROBOT_NAME remappings:="[('/ublox_gps_node/fix', 'gpsfix')]"
 tmux select-pane -t "$SESSION:9.1"
-# If you need to run NTRIP later, you can add it here.
+tmux send-keys "sleep 30 && ros2 run ntrip_client ntrip_ros.py --ros-args \
+  -p host:=nrtk-swepos.lm.se \
+  -p port:=80 \
+  -p mountpoint:=MSM_GNSS \
+  -p authenticate:=true \
+  -p username:=$SWEPOS_USER \
+  -p password:=$SWEPOS_PASS \
+  -p rtcm_topic:=/rtcm" C-m
 
 # --- Logging ---
 tmux new-window -t "$SESSION:10" -n "logging"
