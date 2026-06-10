@@ -26,6 +26,7 @@ from geometry_msgs.msg import TransformStamped, Twist
 from smarc_utilities.georef_utils import convert_latlon_to_utm
 
 from floatsam_controllers.floatsam_common import FloatSam
+from floatsam_topic_bridge.floatsam_tf_helpers import FloatSamTransforms
 
 ASKO_LAT = 59.3070981
 ASKO_LON = 18.7085827
@@ -52,6 +53,14 @@ class SmarcTopicsPublisher(Node):
         self.thruster_limit = self.get_parameter("thruster_limit").get_parameter_value().double_value
         self.master_robot_name = self.get_parameter('master_floatsam').get_parameter_value().string_value
         self.num_of_robots = self.get_parameter('num_of_robots').get_parameter_value().integer_value
+
+        self.gps_antenna_offset_x = 0.0  # Update to 0.15 when measured
+        self.gps_antenna_offset_y = 0.0
+        self.gps_antenna_offset_z = 0.0
+
+        self.sonar_offset_x = 0.0  # Update to 0.1 when measured
+        self.sonar_offset_y = 0.0
+        self.sonar_offset_z = 0.0
 
         # Setup robot IDs for multi-agent coordination
         self.robot_ids = range(self.num_of_robots)
@@ -872,28 +881,47 @@ class SmarcTopicsPublisher(Node):
             std_msg.header.stamp = self.get_clock().now().to_msg()
             std_msg.header.frame_id = f"{self.robot_name}/odom"
             std_msg.child_frame_id = f"{self.robot_name}/base_link"
-            
-            # NED to ENU conversion (Position)
-            std_msg.pose.pose.position.x = self.raw_px4_x
-            std_msg.pose.pose.position.y = self.raw_px4_y
-            std_msg.pose.pose.position.z = float(-msg.z)
+
+            if self.is_receiving_rtk_heading and not math.isnan(self.latest_rtk_heading_rad):
+                enu_heading = (math.pi / 2.0) - self.latest_rtk_heading_rad
+            else:
+                enu_heading = (math.pi / 2.0) - float(msg.heading)
+
+            comp_x, comp_y, comp_z = FloatSamTransforms.apply_lever_arm_compensation(
+            self.raw_px4_x, self.raw_px4_y, float(-msg.z),
+            enu_heading,
+            self.gps_antenna_offset_x,
+            self.gps_antenna_offset_y,
+            self.gps_antenna_offset_z
+            )
+
+            enu_heading = math.atan2(math.sin(enu_heading), math.cos(enu_heading))
+
+            # From GPS antenna to ENU 
+            std_msg.pose.pose.position.x = float(comp_x)
+            std_msg.pose.pose.position.y = float(comp_y)
+            std_msg.pose.pose.position.z = float(comp_z)
             
             # NED to ENU conversion (Velocity - Note: This is in the ODOM frame, not base_link!)
             std_msg.twist.twist.linear.x = float(msg.vy)
             std_msg.twist.twist.linear.y = float(msg.vx)
             std_msg.twist.twist.linear.z = float(-msg.vz)
             
-            if self.is_receiving_rtk_heading and not math.isnan(self.latest_rtk_heading_rad):
-                enu_heading = (math.pi / 2.0) - self.latest_rtk_heading_rad
-            else:
-                enu_heading = (math.pi / 2.0) - float(msg.heading)
-
-            enu_heading = math.atan2(math.sin(enu_heading), math.cos(enu_heading))
 
             std_msg.pose.pose.orientation.w = math.cos(enu_heading / 2.0)
             std_msg.pose.pose.orientation.x = 0.0
             std_msg.pose.pose.orientation.y = 0.0
             std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
+
+            t_sonar = FloatSamTransforms.create_static_tf_transform(
+                std_msg.header.stamp,
+                std_msg.child_frame_id,
+                f"{self.robot_name}/sonar_link",
+                self.sonar_offset_x,
+                self.sonar_offset_y,
+                self.sonar_offset_z
+            )
+            self.tf_broadcaster.sendTransform(t_sonar)
 
             # Broadcast ODOM -> BASE_LINK
             t_base = TransformStamped()
