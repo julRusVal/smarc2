@@ -110,7 +110,7 @@ tmux select-window -t "$SESSION:9"
 tmux split-window -h -t "$SESSION:9.0"
 tmux select-pane -t "$SESSION:9.0"
 
-tmux send-keys "ros2 launch ublox_gps ublox_gps_namespace.launch robot_name:=$ROBOT_NAME" C-m
+tmux send-keys "sleep 5 && ros2 launch ublox_gps ublox_gps_node-launch.py robot_name:=$ROBOT_NAME" C-m
 
 tmux select-pane -t "$SESSION:9.1"
 tmux send-keys "sleep 30 && ros2 run ntrip_client ntrip_ros.py --ros-args \
@@ -120,6 +120,7 @@ tmux send-keys "sleep 30 && ros2 run ntrip_client ntrip_ros.py --ros-args \
   -p authenticate:=true \
   -p username:=$SWEPOS_USER \
   -p password:=$SWEPOS_PASS \
+  -p rtcm_message_package:=rtcm_msgs \
   -p rtcm_topic:=/rtcm" C-m
 
 # --- Logging ---
