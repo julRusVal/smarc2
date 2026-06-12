@@ -26,6 +26,7 @@ else
     docker run -it \
         --name ${CONTAINER_NAME} \
         --network host \
+	--privileged \
         --env-file swepos_credentials.env \
         --device=/dev/ublox_gps \
         -v $(pwd):/home/smarc2user/colcon_ws/src/smarc2 \
