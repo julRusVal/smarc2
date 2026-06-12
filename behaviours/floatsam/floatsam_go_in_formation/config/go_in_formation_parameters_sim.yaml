@@ -3,7 +3,7 @@
     'yaw_p_gain': 0.3
     'yaw_i_gain': 0.0
     'yaw_d_gain': 0.1  
-    'yaw_threshold': 0.5
+    'yaw_threshold': 1.0
             
     'yawrate_p_gain': 300.0
     'yawrate_i_gain': 0.0
@@ -17,3 +17,5 @@
     'carrot_speed': 1.0
     'move_to_trigger': 2.0
     'catch_up_gain': 0.8
+    'catch_up_distance': 1.0
+    'look_a_head_distance': 1.0
