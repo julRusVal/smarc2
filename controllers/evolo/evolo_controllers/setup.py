@@ -14,7 +14,10 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*')),
     ],
-    install_requires=['setuptools'],
+    install_requires=[
+        'setuptools',
+        'transforms3d'
+    ],
     zip_safe=True,
     maintainer='Niklas',
     maintainer_email='nrol@kth.se',
@@ -23,7 +26,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'yaw_controller = evolo_controllers.yaw_control:main',
+            'controller = evolo_controllers.control:main',
         ],
     },
 )

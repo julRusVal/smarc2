@@ -9,7 +9,9 @@ from smarc_action_base.gentler_action_server import GentlerActionServer
 from geodesy import utm
 from geographic_msgs.msg import GeoPoint
 from tf2_geometry_msgs import do_transform_pose_stamped
-from tf_transformations import euler_from_quaternion
+
+from transforms3d.euler import euler2quat
+
 from rclpy.time import Duration, Time
 from nav_msgs.srv import SetMap
 from nav_msgs.msg import OccupancyGrid
@@ -17,22 +19,56 @@ from nav_msgs.msg import MapMetaData
 from nav_msgs.srv import GetPlan
 from nav_msgs.msg import Path
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Pose
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Pose, Twist
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from std_msgs.msg import Float32, Empty
 from std_msgs.msg import String
 from evolo_msgs.msg import Topics as evoloTopics
 from smarc_msgs.msg import Topics as smarcTopics
 from smarc_control_msgs.msg import Topics as controlTopics
 from tf2_ros import Buffer, TransformException, TransformListener
+import math
+
 import numpy as np
 import time
 import math
 import json
 
-import tf_transformations
 
 from enum import Enum
+
+def vec2_directed_angle(v1, v2):
+    """
+    # Author: Ozer Ozkahraman (ozkahramanozer@gmail.com)
+    # Date: 2018-07-10
+
+    returns the shortest angle from v1 to v2 in radians.
+    v1 + angle = v2.
+
+    positive value means ccw rotation from v1 to v2.
+    negative value means cw.
+
+    v1, v2 can be (N,2)
+    """
+    v1 = np.array(np.atleast_2d(v1))
+    v2 = np.array(np.atleast_2d(v2))
+    assert v1.shape == v2.shape
+
+    x1s = v1[:,0]
+    x2s = v2[:,0]
+    y1s = v1[:,1]
+    y2s = v2[:,1]
+
+    dots = x1s*x2s + y1s*y2s
+    dets = x1s*y2s - y1s*x2s
+
+    angles = np.arctan2(dets,dots)
+
+    N,_ = v1.shape
+    if N == 1:
+        return angles[0]
+    else:
+        return angles
 
 class EvoloMoveTo():
 
@@ -76,8 +112,22 @@ class EvoloMoveTo():
 
         #Settings etc
         self.target_tol = 10 #Waypoint tolerance
-        self.timeout = 1800.0
-        self.target_speed = "fly"
+        self._node.declare_parameter('target_radius', 10)
+        self.target_tol = float(self._node.get_parameter('target_radius').value)
+
+        self._node.declare_parameter('timeout', 1800)
+        self.timeout = float(self._node.get_parameter('timeout').value)
+
+        self._node.declare_parameter('p_gain', 0.5)
+        self.pid_p_gain = float(self._node.get_parameter('p_gain').value)
+
+        self._node.declare_parameter('i_gain', 0)
+        self.pid_i_gain = float(self._node.get_parameter('i_gain').value)
+
+        self._node.declare_parameter('d_gain', 0)
+        self.pid_d_gain = float(self._node.get_parameter('d_gain').value)
+
+        self.max_speed = 8.0        
         
         #Time of action start to check for timeout
         self.action_started_time = None
@@ -87,7 +137,8 @@ class EvoloMoveTo():
         self.subscriber_callback_group = ReentrantCallbackGroup()
 
         # Publishers
-        self.evolo_pub = self._node.create_publisher(Float32, controlTopics.CONTROL_YAW_TOPIC,10, callback_group=self.publisher_callback_group)
+        # FIXME: this is hacky, should be EVOLO_CONTROL_PLANNED instead.
+        self.evolo_pub = self._node.create_publisher(Odometry, evoloTopics.EVOLO_CONTROL_SETPOINT, 10, callback_group=self.publisher_callback_group)
         # Subscribers
         self.robot_sub = self._node.create_subscription(Odometry, smarcTopics.ODOM_TOPIC, self.robot_odom_callback,10, callback_group=self.subscriber_callback_group)
         self._node.get_logger().info("Action server started")
@@ -101,16 +152,27 @@ class EvoloMoveTo():
         speed = goal_request['speed']
         waypoint = goal_request['waypoint']
 
+        try:
+            speed = float(speed)
+        except Exception as e:
+            self._node.get_logger().info(f"Tried to parse speed as float. Did not work: {speed}, {e}")
+            if(speed == "slow"): speed = 2.0
+            elif(speed == "standard"): speed = 4.9
+            elif(speed == "fast"): speed = 6
+            else: speed = 0.0
+
+        assert type(speed) == float
+
         self._node.get_logger().info(f"speed: {speed}, waypoint: {waypoint}")
 
         #if 'timeout' in params.keys() : self.timeout = min(3600, max(1, params['timeout']))
-        self.timeout = 600
+        #self.timeout = 600
         #self._node.get_logger().info('timeout: ' + str(self.timeout))
 
-        #TODO compute target position from lat lon
+        #Compute target position from lat lon
         lat = float(waypoint['latitude'])
         lon = float(waypoint['longitude'])
-        self._node.get_logger().info(f"lat lon sent to function: {lat}, {lon}")
+        #self._node.get_logger().info(f"lat lon sent to function: {lat}, {lon}")
         self.target_position = self.latlon_to_local_frame([lat,lon])
         self.target_speed = speed
         return True
@@ -143,19 +205,28 @@ class EvoloMoveTo():
             self._node.get_logger().error("ERROR no robot position")
             return False
 
-        #Calculate distance to our current loiter target and change target if we are close enough to switch to the next one
+        #Calculate distance to our target and return true (success) if we are close to it
         self.distance_to_target = self.calculate_distance(self.robot_position, self.target_position)
         if(self.distance_to_target < self.target_tol):
             #TODO send speed = Stop
             return True
 
-        targetYaw = Float32()
         dx = self.target_position.pose.position.x - self.robot_position.pose.position.x
         dy = self.target_position.pose.position.y - self.robot_position.pose.position.y
-        targetYaw.data = math.atan2(dy,dx) # yaw in ENU
+        targetYaw = math.atan2(dy,dx) # yaw in ENU
+        target_quaternion = euler2quat(0,0,targetYaw, axes='sxyz')
 
-        self.evolo_pub.publish(targetYaw)
-        
+        control_msg = Odometry()
+        control_msg.header.stamp    = self._node.get_clock().now().to_msg()
+        control_msg.header.frame_id = self.frame_id
+        control_msg.child_frame_id = "evolo/base_link"
+        control_msg.pose.pose.orientation.x = target_quaternion[1]
+        control_msg.pose.pose.orientation.y = target_quaternion[2]
+        control_msg.pose.pose.orientation.z = target_quaternion[3]
+        control_msg.pose.pose.orientation.w = target_quaternion[0]
+        control_msg.twist.twist.linear.x  = self.target_speed
+        self.evolo_pub.publish(control_msg)
+
         return None
     
     def _give_feedback(self) -> str:
@@ -192,11 +263,11 @@ class EvoloMoveTo():
         self._node.get_logger().info(f"Utmpoint: {point}")
 
         #Add yaw
-        quaternion_values = tf_transformations.quaternion_from_euler(0,0,yaw)
-        pose_stamp.pose.orientation.x = quaternion_values[0]
-        pose_stamp.pose.orientation.y = quaternion_values[1]
-        pose_stamp.pose.orientation.z = quaternion_values[2]
-        pose_stamp.pose.orientation.w = quaternion_values[3]
+        quaternion_values = euler2quat(0,0,yaw, axes='sxyz')
+        pose_stamp.pose.orientation.x = quaternion_values[1]
+        pose_stamp.pose.orientation.y = quaternion_values[2]
+        pose_stamp.pose.orientation.z = quaternion_values[3]
+        pose_stamp.pose.orientation.w = quaternion_values[0]
 
         t = self._tf_buffer.lookup_transform(
                 target_frame=self.frame_id,
