@@ -133,13 +133,13 @@ if [[ "$ROBOT_NAME" == "floatsam_usv_0" ]]; then
 
     tmux new-window -t "$SESSION:11" -n "OWTT"
     tmux select-window -t "$SESSION:11"
-    tmux send-keys "export ROS_DOMAIN_ID=$IDX && source install/setup.bash && ros2 launch serial_ping_pkg owtt_leader_node.launch use_robot_name:=$ROBOT_NAME use_sim_time:=false serial_port:=/dev/succorfish own_modem_id:=067 broadcast_interval_s:=2" C-m
+    tmux send-keys "export ROS_DOMAIN_ID=$IDX && source install/setup.bash && ros2 launch serial_ping_pkg owtt_leader_node.launch use_robot_name:=$ROBOT_NAME use_sim_time:=false serial_port:=/dev/succorfish own_modem_id:="067" broadcast_interval_s:=2" C-m
 
 elif [[ "$ROBOT_NAME" == "floatsam_usv_1" ]]; then
 
     tmux new-window -t "$SESSION:11" -n "OWTT"
     tmux select-window -t "$SESSION:11"
-    tmux send-keys "export ROS_DOMAIN_ID=$IDX && source install/setup.bash && ros2 launch serial_ping_pkg owtt_follower_node.launch use_robot_name:=$ROBOT_NAME use_sim_time:=false serial_port:=/dev/succorfish own_modem_id:=069 leader1_modem_id:=067 default_sound_velocity:=1481" C-m
+    tmux send-keys "export ROS_DOMAIN_ID=$IDX && source install/setup.bash && ros2 launch serial_ping_pkg owtt_follower_node.launch use_robot_name:=$ROBOT_NAME use_sim_time:=false serial_port:=/dev/succorfish own_modem_id:="069" leader1_modem_id:="067" default_sound_velocity:=1481.0" C-m
 
 fi
 
