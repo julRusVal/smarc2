@@ -3,15 +3,15 @@
     'yaw_p_gain': 0.3
     'yaw_i_gain': 0.0
     'yaw_d_gain': 0.1  
-    'yaw_threshold': 0.5
+    'yaw_threshold': 0.4
             
     'yawrate_p_gain': 300.0
     'yawrate_i_gain': 0.0
     'yawrate_d_gain': 30.0  
             
-    'velocity_p_gain': 500.0
-    'velocity_i_gain': 10.0
+    'velocity_p_gain': 50.0
+    'velocity_i_gain': 3.0
     'velocity_d_gain': 0.0
 
-    'goal_tolerance': 1.0
+    'goal_tolerance': 1.5
     'speed_threshold': 10.0
