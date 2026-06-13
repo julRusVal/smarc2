@@ -29,8 +29,8 @@ from smarc_utilities.georef_utils import convert_latlon_to_utm
 from floatsam_controllers.floatsam_common import FloatSam
 from floatsam_topic_bridge.floatsam_tf_helpers import FloatSamTransforms
 
-ASKO_LAT = 59.3070981
-ASKO_LON = 18.7085827
+ASKO_LAT = 58.8233198
+ASKO_LON = 17.634154
 
 class SmarcTopicsPublisher(Node):
     """
