@@ -28,8 +28,8 @@ from smarc_utilities.georef_utils import convert_latlon_to_utm
 from floatsam_controllers.floatsam_common import FloatSam
 from floatsam_topic_bridge.floatsam_tf_helpers import FloatSamTransforms
 
-ASKO_LAT = 59.3070981
-ASKO_LON = 18.7085827
+ASKO_LAT = 58.8233347
+ASKO_LON = 17.6361392
 
 class SmarcTopicsPublisher(Node):
     """
@@ -54,13 +54,17 @@ class SmarcTopicsPublisher(Node):
         self.master_robot_name = self.get_parameter('master_floatsam').get_parameter_value().string_value
         self.num_of_robots = self.get_parameter('num_of_robots').get_parameter_value().integer_value
 
-        self.gps_antenna_offset_x = 0.0  # Update to 0.15 when measured
-        self.gps_antenna_offset_y = 0.0
-        self.gps_antenna_offset_z = 0.0
+        self.gps_antenna_offset_x = -32.0  # Update to 0.15 when measured
+        self.gps_antenna_offset_y = 20.0
+        self.gps_antenna_offset_z = 13.0
 
         self.sonar_offset_x = 0.0  # Update to 0.1 when measured
         self.sonar_offset_y = 0.0
         self.sonar_offset_z = 0.0
+
+        self.modem_offset_x = 0.27
+        self.modem_offset_y = 0.0
+        self.modem_offset_z = -0.20
 
         # Setup robot IDs for multi-agent coordination
         self.robot_ids = range(self.num_of_robots)
@@ -420,9 +424,6 @@ class SmarcTopicsPublisher(Node):
         return callback
     
 
-    def _non_name_spaced_gps_cb(self, msg: NavSatFix):
-        self._name_spaced_gps_pub.publish(msg)
-
     def _setup_topic_bridges(self):
         """Set up subscribers and publishers for all configured topics.
         Output topics are relative — PushRosNamespace handles the robot prefix."""
@@ -469,13 +470,7 @@ class SmarcTopicsPublisher(Node):
             if not self.use_sim and px4_rtk_topic:
                 self.sensor_gps_pub = self.create_publisher(SensorGps, px4_rtk_topic, self.px4_qos)
                 self.get_logger().info(f'  RTK: Injection to {px4_rtk_topic} ENABLED')
-
-            self._non_name_spaced_gps = self.create_subscription(
-                NavSatFix, '/ublox_gps_node/fix', self._non_name_spaced_gps_cb, 10)
-            self._name_spaced_gps_pub = self.create_publisher(
-                NavSatFix, 'ublox_gps_node/fix', 10)
         
-
 
         # IMU
         if 'imu' in sensors:
@@ -933,6 +928,18 @@ class SmarcTopicsPublisher(Node):
                 self.sonar_offset_z
             )
             self.tf_broadcaster.sendTransform(t_sonar)
+
+            # base_link -> modem_link (offsets are in FLU/URDF convention,
+            # which matches base_link REP-103, so they map through directly)
+            t_modem = FloatSamTransforms.create_static_tf_transform(
+                std_msg.header.stamp,
+                std_msg.child_frame_id,
+                f"{self.robot_name}/modem_link",
+                self.modem_offset_x,
+                self.modem_offset_y,
+                self.modem_offset_z
+            )
+            self.tf_broadcaster.sendTransform(t_modem)
 
             # Broadcast ODOM -> BASE_LINK
             t_base = TransformStamped()

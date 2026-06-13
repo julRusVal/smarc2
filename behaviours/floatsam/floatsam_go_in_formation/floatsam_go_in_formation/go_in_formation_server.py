@@ -53,6 +53,12 @@ class FloatsamGoInFormationAction():
         # since _loop_inner is what actually advances the shared progress.
         self._loop_frequency = 10
 
+        self._best_effort_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         self._as = GentlerActionServer(
             node, 
             'go_in_formation',
