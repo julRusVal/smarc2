@@ -76,8 +76,8 @@ tmux select-pane -t "$SESSION:4.0"
 tmux send-keys "sleep 5 && ros2 launch floatsam_move_to floatsam_move_to.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
 tmux select-pane -t "$SESSION:4.1"
 tmux send-keys "sleep 5 && ros2 launch floatsam_move_to_path floatsam_move_to_path.launch.py robot_name:=$ROBOT_NAME use_sim:=$SIM_TRUE" C-m
-tmux select-pane -t "$SESSION:4.2"
-tmux send-keys "sleep 5 && ros2 run floatsam_loiter floatsam_loiter_action_server --ros-args -r __ns:=/$ROBOT_NAME -p robot_name:=$ROBOT_NAME -p loiter_move_to_speed:=fast -p use_sim:=$SIM_TRUE" C-m
+#tmux select-pane -t "$SESSION:4.2"
+#tmux send-keys "sleep 5 && ros2 run floatsam_loiter floatsam_loiter_action_server --ros-args -r __ns:=/$ROBOT_NAME -p robot_name:=$ROBOT_NAME -p loiter_move_to_speed:=fast -p use_sim:=$SIM_TRUE" C-m
 
 # --- loiter_heading, move_to_bidirectional ---
 tmux new-window -t "$SESSION:5" -n "heading_bidir"
@@ -127,6 +127,21 @@ rtcm_message_package:=rtcm_msgs" C-m
 # --- Logging ---
 tmux new-window -t "$SESSION:10" -n "logging"
 tmux select-window -t "$SESSION:10"
+
+# --- OWTT Node ---
+if [[ "$ROBOT_NAME" == "floatsam_usv_0" ]]; then
+
+    tmux new-window -t "$SESSION:11" -n "OWTT"
+    tmux select-window -t "$SESSION:11"
+    tmux send-keys "export ROS_DOMAIN_ID=$IDX && source install/setup.bash && ros2 launch serial_ping_pkg owtt_leader_node.launch use_robot_name:=$ROBOT_NAME use_sim_time:=false serial_port:=/dev/succorfish own_modem_id:=067 broadcast_interval_s:=2" C-m
+
+elif [[ "$ROBOT_NAME" == "floatsam_usv_1" ]]; then
+
+    tmux new-window -t "$SESSION:11" -n "OWTT"
+    tmux select-window -t "$SESSION:11"
+    tmux send-keys "export ROS_DOMAIN_ID=$IDX && source install/setup.bash && ros2 launch serial_ping_pkg owtt_follower_node.launch use_robot_name:=$ROBOT_NAME use_sim_time:=false serial_port:=/dev/succorfish own_modem_id:=069 leader1_modem_id:=067 default_sound_velocity:=1481" C-m
+
+fi
 
 # Set default window and attach/switch
 tmux select-window -t "$SESSION:9"
