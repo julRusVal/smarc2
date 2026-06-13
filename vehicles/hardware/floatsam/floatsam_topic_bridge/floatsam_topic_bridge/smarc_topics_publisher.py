@@ -420,9 +420,6 @@ class SmarcTopicsPublisher(Node):
         return callback
     
 
-    def _non_name_spaced_gps_cb(self, msg: NavSatFix):
-        self._name_spaced_gps_pub.publish(msg)
-
     def _setup_topic_bridges(self):
         """Set up subscribers and publishers for all configured topics.
         Output topics are relative — PushRosNamespace handles the robot prefix."""
@@ -469,13 +466,7 @@ class SmarcTopicsPublisher(Node):
             if not self.use_sim and px4_rtk_topic:
                 self.sensor_gps_pub = self.create_publisher(SensorGps, px4_rtk_topic, self.px4_qos)
                 self.get_logger().info(f'  RTK: Injection to {px4_rtk_topic} ENABLED')
-
-            self._non_name_spaced_gps = self.create_subscription(
-                NavSatFix, '/ublox_gps_node/fix', self._non_name_spaced_gps_cb, 10)
-            self._name_spaced_gps_pub = self.create_publisher(
-                NavSatFix, 'ublox_gps_node/fix', 10)
         
-
 
         # IMU
         if 'imu' in sensors:
