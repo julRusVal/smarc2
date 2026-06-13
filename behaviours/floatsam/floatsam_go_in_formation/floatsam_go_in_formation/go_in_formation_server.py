@@ -41,6 +41,12 @@ class FloatsamGoInFormationAction():
             depth=1
         )
 
+        self._best_effort_qos = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         self._as = GentlerActionServer(
             node, 
             'go_in_formation',
@@ -223,11 +229,6 @@ class FloatsamGoInFormationAction():
 
     def create_node_publishers(self) -> None:
         self._move_on_place_publisher = self._node.create_publisher(Bool, 'move_on_place', 1)
-        self._best_effort_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1
-        )
 
         self._yaw_reference_publisher = self._node.create_publisher(
             FloatStamped, FloatsamTopics.YAW_SETPOINT, self._best_effort_qos)
