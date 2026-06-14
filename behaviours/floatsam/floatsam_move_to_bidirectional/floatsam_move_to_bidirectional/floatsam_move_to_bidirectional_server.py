@@ -77,17 +77,17 @@ class MoveToActionFloatSam():
         self._node.declare_parameter("use_sim", True, bool_desc)
         self._node.declare_parameter("robot_name", 'floatsam_usv', string_desc)
 
-        self._node.declare_parameter("yaw_p_gain", 0.3, double_desc)
+        self._node.declare_parameter("yaw_p_gain", 0.6, double_desc)
         self._node.declare_parameter("yaw_i_gain", 0.0, double_desc)
-        self._node.declare_parameter("yaw_d_gain", 0.1, double_desc)
-        self._node.declare_parameter("yaw_threshold", 0.4, double_desc)
+        self._node.declare_parameter("yaw_d_gain", 0.2, double_desc)
+        self._node.declare_parameter("yaw_threshold", 0.5, double_desc)
 
-        self._node.declare_parameter("yawrate_p_gain", 400.0, double_desc)
+        self._node.declare_parameter("yawrate_p_gain", 300.0, double_desc)
         self._node.declare_parameter("yawrate_i_gain", 0.0, double_desc)
-        self._node.declare_parameter("yawrate_d_gain", 35.0, double_desc)
+        self._node.declare_parameter("yawrate_d_gain", 30.0, double_desc)
 
-        self._node.declare_parameter("velocity_p_gain", 200.0, double_desc)
-        self._node.declare_parameter("velocity_i_gain", 50.0, double_desc)
+        self._node.declare_parameter("velocity_p_gain", 500.0, double_desc)
+        self._node.declare_parameter("velocity_i_gain", 10.0, double_desc)
         self._node.declare_parameter("velocity_d_gain", 0.0, double_desc)
 
         self._node.declare_parameter("goal_tolerance", 1.5, double_desc)
@@ -103,9 +103,13 @@ class MoveToActionFloatSam():
         self._move_to_yaw_d_gain = self._node.get_parameter('yaw_d_gain').get_parameter_value().double_value
         self._move_to_yaw_threshold = self._node.get_parameter('yaw_threshold').get_parameter_value().double_value
 
+
         self._move_to_yawrate_p_gain = self._node.get_parameter('yawrate_p_gain').get_parameter_value().double_value
         self._move_to_yawrate_i_gain = self._node.get_parameter('yawrate_i_gain').get_parameter_value().double_value
         self._move_to_yawrate_d_gain = self._node.get_parameter('yawrate_d_gain').get_parameter_value().double_value
+        self._node.get_logger().info(f"self._move_to_yawrate_p_gain: {self._move_to_yawrate_p_gain}")
+        self._node.get_logger().info(f"self._move_to_yawrate_i_gain: {self._move_to_yawrate_i_gain}")
+        self._node.get_logger().info(f"self._move_to_yawrate_d_gain: {self._move_to_yawrate_d_gain}")
 
         self._move_to_velocity_p_gain = self._node.get_parameter('velocity_p_gain').get_parameter_value().double_value
         self._move_to_velocity_i_gain = self._node.get_parameter('velocity_i_gain').get_parameter_value().double_value
