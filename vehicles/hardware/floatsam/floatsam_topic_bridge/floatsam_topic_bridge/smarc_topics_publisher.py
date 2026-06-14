@@ -59,9 +59,13 @@ class SmarcTopicsPublisher(Node):
         self.gps_antenna_offset_y = 0.0
         self.gps_antenna_offset_z = 0.0
 
-        self.sonar_offset_x = 0.0  # Update to 0.1 when measured
+        self.sonar_offset_x = 0.32  # Update to 0.1 when measured
         self.sonar_offset_y = 0.0
-        self.sonar_offset_z = 0.0
+        self.sonar_offset_z = -0.20
+
+        self.modem_offset_x = 0.27
+        self.modem_offset_y = 0.0
+        self.modem_offset_z = -0.20
 
         # Setup robot IDs for multi-agent coordination
         self.robot_ids = range(self.num_of_robots)
@@ -967,15 +971,42 @@ class SmarcTopicsPublisher(Node):
             std_msg.pose.pose.orientation.y = 0.0
             std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
 
+            # Sonar is mounted with 180 deg roll, 30 deg pitch (yaw 0).
+            # Quaternion from RPY (ZYX/Tait-Bryan), w first.
+            sonar_roll = math.pi
+            sonar_pitch = math.radians(30.0)
+            cr, sr = math.cos(sonar_roll / 2.0), math.sin(sonar_roll / 2.0)
+            cp, sp = math.cos(sonar_pitch / 2.0), math.sin(sonar_pitch / 2.0)
+            sonar_qw = cr * cp
+            sonar_qx = sr * cp
+            sonar_qy = cr * sp
+            sonar_qz = -sr * sp
+
             t_sonar = FloatSamTransforms.create_static_tf_transform(
                 std_msg.header.stamp,
                 std_msg.child_frame_id,
                 f"{self.robot_name}/sonar_link",
                 self.sonar_offset_x,
                 self.sonar_offset_y,
-                self.sonar_offset_z
+                self.sonar_offset_z,
+                sonar_qw,
+                sonar_qx,
+                sonar_qy,
+                sonar_qz
             )
             self.tf_broadcaster.sendTransform(t_sonar)
+
+            # base_link -> modem_link (offsets are in FLU/URDF convention,
+            # which matches base_link REP-103, so they map through directly)
+            t_modem = FloatSamTransforms.create_static_tf_transform(
+                std_msg.header.stamp,
+                std_msg.child_frame_id,
+                f"{self.robot_name}/modem_link",
+                self.modem_offset_x,
+                self.modem_offset_y,
+                self.modem_offset_z
+            )
+            self.tf_broadcaster.sendTransform(t_modem)
 
             # Broadcast ODOM -> BASE_LINK
             t_base = TransformStamped()
