@@ -786,7 +786,7 @@ class SmarcTopicsPublisher(Node):
             px4_gps.vel_n_m_s = 0.0
             px4_gps.vel_e_m_s = 0.0
             px4_gps.vel_d_m_s = 0.0
-            px4_gps.vel_ned_valid = False 
+            px4_gps.vel_ned_valid = True 
             px4_gps.s_variance_m_s = 0.5  # Tell EKF: "Velocity is valid, but very noisy, trust the IMU more"
             px4_gps.c_variance_rad = 0.5 
 
