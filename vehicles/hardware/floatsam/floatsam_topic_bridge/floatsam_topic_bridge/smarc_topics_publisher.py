@@ -9,6 +9,7 @@ from rclpy.node import Node
 import math
 import importlib
 import json
+import queue
 import paho.mqtt.client as mqtt
 
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
@@ -28,8 +29,8 @@ from smarc_utilities.georef_utils import convert_latlon_to_utm
 from floatsam_controllers.floatsam_common import FloatSam
 from floatsam_topic_bridge.floatsam_tf_helpers import FloatSamTransforms
 
-ASKO_LAT = 58.8233347
-ASKO_LON = 17.6361392
+ASKO_LAT = 58.8233198
+ASKO_LON = 17.634154
 
 class SmarcTopicsPublisher(Node):
     """
@@ -54,13 +55,13 @@ class SmarcTopicsPublisher(Node):
         self.master_robot_name = self.get_parameter('master_floatsam').get_parameter_value().string_value
         self.num_of_robots = self.get_parameter('num_of_robots').get_parameter_value().integer_value
 
-        self.gps_antenna_offset_x = -32.0  # Update to 0.15 when measured
-        self.gps_antenna_offset_y = 20.0
-        self.gps_antenna_offset_z = 13.0
+        self.gps_antenna_offset_x = 0.0  # Update to 0.15 when measured
+        self.gps_antenna_offset_y = 0.0
+        self.gps_antenna_offset_z = 0.0
 
-        self.sonar_offset_x = 0.0  # Update to 0.1 when measured
+        self.sonar_offset_x = 0.32  # Update to 0.1 when measured
         self.sonar_offset_y = 0.0
-        self.sonar_offset_z = 0.0
+        self.sonar_offset_z = -0.20
 
         self.modem_offset_x = 0.27
         self.modem_offset_y = 0.0
@@ -171,10 +172,16 @@ class SmarcTopicsPublisher(Node):
         self.local_map_offset_x = 0.0
         self.local_map_offset_y = 0.0
 
-        # Initialize MQTT client
-        self._setup_mqtt_client()
-        
-        # Setup MQTT subscriptions for other robots' odometry
+        # Thread-safe handoff queue: the MQTT network thread (paho) ENQUEUES
+        # parsed messages, and a ROS timer DRAINS them on the executor thread.
+        # Nothing in the MQTT callbacks is allowed to call rclpy directly.
+        self._mqtt_inbound_queue = queue.Queue()
+
+        # Create the ROS publishers that re-broadcast other robots' odometry.
+        # Creating publishers is synchronous and safe here. The actual MQTT
+        # *connection* is deliberately deferred to the very end of __init__
+        # (see _setup_mqtt_client call below) so a slow/unreachable broker can
+        # never stall construction or race the executor startup.
         self._setup_mqtt_odom_subscriptions()
 
         # Initialize TF buffer and broadcasters BEFORE setting up topic bridges
@@ -208,6 +215,15 @@ class SmarcTopicsPublisher(Node):
         # Diagnostic timer to track message rates
         self.diagnostic_timer = self.create_timer(5.0, self._diagnostic_callback)
 
+        # Drain MQTT->ROS messages on the EXECUTOR THREAD (not the paho thread).
+        # 20 Hz is plenty for inter-robot odometry and keeps latency low.
+        self.mqtt_queue_timer = self.create_timer(0.05, self._process_mqtt_queue)
+
+        # Connect to the MQTT broker LAST and ASYNCHRONOUSLY. Every ROS entity
+        # (pubs, subs, TF, timers) now exists, so when on_connect/on_message
+        # fire on the paho thread they only ever touch the handoff queue above.
+        self._setup_mqtt_client()
+
     def _get_nested_params(self, prefix):
         result = {}
         # get_parameters_by_prefix returns a dict of relative keys and their Parameter objects
@@ -232,7 +248,11 @@ class SmarcTopicsPublisher(Node):
             self.mqtt_client.on_message = self._mqtt_on_message
             
             self.get_logger().info(f'Connecting to MQTT broker at {self.mqtt_broker_ip}:{self.mqtt_broker_port}...')
-            self.mqtt_client.connect(self.mqtt_broker_ip, self.mqtt_broker_port, keepalive=60)
+            # connect_async() returns immediately; the TCP connect + MQTT
+            # handshake happen on the loop_start() network thread, and paho
+            # will automatically retry if the broker is down. This keeps
+            # __init__ non-blocking regardless of broker latency/availability.
+            self.mqtt_client.connect_async(self.mqtt_broker_ip, self.mqtt_broker_port, keepalive=60)
             self.mqtt_client.loop_start()
             
         except Exception as e:
@@ -261,29 +281,52 @@ class SmarcTopicsPublisher(Node):
         pass  # Silent callback to avoid log spam
 
     def _mqtt_on_message(self, client, userdata, msg):
-        """Callback for incoming MQTT messages (odometry from other robots)."""
+        """Runs on the paho NETWORK THREAD. Must NOT call rclpy publish APIs.
+        Parses the payload and hands it to the executor thread via a queue."""
         try:
-            # Parse the topic to extract robot name
-            # Expected format: <robot_name>/smarc/odom_in_map
+            # Expected topic format: <robot_name>/smarc/odom_in_map
             topic_parts = msg.topic.split('/')
             if len(topic_parts) >= 3 and topic_parts[1] == 'smarc' and topic_parts[2] == 'odom_in_map':
                 robot_name = topic_parts[0]
-                
-                # Parse the incoming JSON odometry message
-                odom_dict = json.loads(msg.payload.decode('utf-8'))
-                
-                # Check if we have a publisher for this robot
+
+                # Ignore robots we have no publisher for (e.g. ourselves)
                 if robot_name not in self._other_robots_odom_pubs:
                     return
-                
-                # Reconstruct Odometry message from JSON
-                odom_msg = self._dict_to_odometry(odom_dict)
-                
-                # Republish to local ROS topic
-                self._other_robots_odom_pubs[robot_name].publish(odom_msg)
-                
+
+                odom_dict = json.loads(msg.payload.decode('utf-8'))
+
+                # Hand off to the ROS executor thread. DO NOT publish here:
+                # publishing from this thread is what could deadlock the
+                # single-threaded executor.
+                self._mqtt_inbound_queue.put((robot_name, odom_dict))
+
         except Exception as e:
-            self.get_logger().error(f'Failed to parse MQTT message from {msg.topic}: {e}', throttle_duration_sec=5.0)
+            self.get_logger().error(
+                f'Failed to parse MQTT message from {msg.topic}: {e}',
+                throttle_duration_sec=5.0
+            )
+
+    def _process_mqtt_queue(self):
+        """Runs on the ROS EXECUTOR THREAD (timer at 20 Hz). Drains messages
+        received on the MQTT network thread and republishes them as ROS topics.
+        All rclpy publishing happens here, on one known thread, which removes
+        the cross-thread race that previously froze the executor."""
+        while True:
+            try:
+                robot_name, odom_dict = self._mqtt_inbound_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                pub = self._other_robots_odom_pubs.get(robot_name)
+                if pub is None:
+                    continue
+                odom_msg = self._dict_to_odometry(odom_dict)
+                pub.publish(odom_msg)
+            except Exception as e:
+                self.get_logger().error(
+                    f'Failed to republish MQTT odom for {robot_name}: {e}',
+                    throttle_duration_sec=5.0
+                )
 
     def _publish_odom_to_mqtt(self, odom_msg: Odometry):
         """Convert and publish Odometry message to MQTT broker as JSON."""
@@ -424,6 +467,9 @@ class SmarcTopicsPublisher(Node):
         return callback
     
 
+    def _non_name_spaced_gps_cb(self, msg: NavSatFix):
+        self._name_spaced_gps_pub.publish(msg)
+
     def _setup_topic_bridges(self):
         """Set up subscribers and publishers for all configured topics.
         Output topics are relative — PushRosNamespace handles the robot prefix."""
@@ -470,7 +516,13 @@ class SmarcTopicsPublisher(Node):
             if not self.use_sim and px4_rtk_topic:
                 self.sensor_gps_pub = self.create_publisher(SensorGps, px4_rtk_topic, self.px4_qos)
                 self.get_logger().info(f'  RTK: Injection to {px4_rtk_topic} ENABLED')
+
+            self._non_name_spaced_gps = self.create_subscription(
+                NavSatFix, '/ublox_gps_node/fix', self._non_name_spaced_gps_cb, 10)
+            self._name_spaced_gps_pub = self.create_publisher(
+                NavSatFix, 'ublox_gps_node/fix', 10)
         
+
 
         # IMU
         if 'imu' in sensors:
@@ -555,12 +607,12 @@ class SmarcTopicsPublisher(Node):
 
     def _port_cmd_callback(self, msg: Float32):
         raw = msg.data / self.thruster_limit
-        self.latest_port_cmd = max(-0.6, min(0.6, raw))
+        self.latest_port_cmd = max(-1.0, min(1.0, raw))
         self.last_cmd_time = self.get_clock().now()
 
     def _strb_cmd_callback(self, msg: Float32):
         raw = msg.data / self.thruster_limit
-        self.latest_strb_cmd = max(-0.6, min(0.6, raw))
+        self.latest_strb_cmd = max(-1.0, min(1.0, raw))
         self.last_cmd_time = self.get_clock().now()
 
     def _publish_actuators(self):
@@ -734,7 +786,7 @@ class SmarcTopicsPublisher(Node):
             px4_gps.vel_n_m_s = 0.0
             px4_gps.vel_e_m_s = 0.0
             px4_gps.vel_d_m_s = 0.0
-            px4_gps.vel_ned_valid = False 
+            px4_gps.vel_ned_valid = True 
             px4_gps.s_variance_m_s = 0.5  # Tell EKF: "Velocity is valid, but very noisy, trust the IMU more"
             px4_gps.c_variance_rad = 0.5 
 
@@ -919,13 +971,28 @@ class SmarcTopicsPublisher(Node):
             std_msg.pose.pose.orientation.y = 0.0
             std_msg.pose.pose.orientation.z = math.sin(enu_heading / 2.0)
 
+            # Sonar is mounted with 180 deg roll, 30 deg pitch (yaw 0).
+            # Quaternion from RPY (ZYX/Tait-Bryan), w first.
+            sonar_roll = math.pi
+            sonar_pitch = math.radians(30.0)
+            cr, sr = math.cos(sonar_roll / 2.0), math.sin(sonar_roll / 2.0)
+            cp, sp = math.cos(sonar_pitch / 2.0), math.sin(sonar_pitch / 2.0)
+            sonar_qw = cr * cp
+            sonar_qx = sr * cp
+            sonar_qy = cr * sp
+            sonar_qz = -sr * sp
+
             t_sonar = FloatSamTransforms.create_static_tf_transform(
                 std_msg.header.stamp,
                 std_msg.child_frame_id,
                 f"{self.robot_name}/sonar_link",
                 self.sonar_offset_x,
                 self.sonar_offset_y,
-                self.sonar_offset_z
+                self.sonar_offset_z,
+                sonar_qw,
+                sonar_qx,
+                sonar_qy,
+                sonar_qz
             )
             self.tf_broadcaster.sendTransform(t_sonar)
 

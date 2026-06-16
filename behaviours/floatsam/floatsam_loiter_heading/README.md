@@ -63,4 +63,4 @@ ros2 run floatsam_go_to_formation floatsam_loiter_heading_action_server \
 ### 2. Send a Loiter Mission (Terminal Command)
 You can activate the server using the ROS 2 CLI. The goal string is a YAML representation containing the JSON payload. duration is in seconds, and heading is in degrees (0-360).
 #### Example: Loiter for 5 minutes (300 seconds) facing East (90 degrees)
-ros2 action send_goal /floatsam_usv_0/loiter_heading smarc_msgs/action/BaseAction "{goal: {data: '{\"duration\": 300.0, \"heading\": 90.0}'}}"
+    

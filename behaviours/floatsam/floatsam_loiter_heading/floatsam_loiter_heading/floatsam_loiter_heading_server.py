@@ -47,12 +47,6 @@ class LoiterActionFloatSam():
         self.create_node_subscriptions()
         self.create_node_publishers()
            
-
-        #self._captain_parameters_publisher = self._node.create_publisher(
-        #    String, 
-        #    'captain_parameters',
-        #    10
-        #)
         
         self._as = GentlerActionServer(
             node,
@@ -73,6 +67,8 @@ class LoiterActionFloatSam():
             f'Loiter configuration: tolerance={self._loiter_tolerance}m, '
             f'reposition_tolerance={self._reposition_tolerance}m, move_to_speed={self._loiter_move_to_speed}'
         )
+
+
         
     def declare_node_parameters(self) -> None:
 
@@ -88,17 +84,17 @@ class LoiterActionFloatSam():
         self._node.declare_parameter('loiter_move_to_speed', 'standard', string_desc)
         self._node.declare_parameter('heading_tolerance', 35.0, double_desc)  
 
-        self._node.declare_parameter('yaw_p_gain', 0.3, double_desc)
+        self._node.declare_parameter('yaw_p_gain', 0.0, double_desc)
         self._node.declare_parameter('yaw_i_gain', 0.0, double_desc)
-        self._node.declare_parameter('yaw_d_gain', 0.1, double_desc)
-        self._node.declare_parameter('yaw_threshold', 0.1, double_desc)
+        self._node.declare_parameter('yaw_d_gain', 0.0, double_desc)
+        self._node.declare_parameter('yaw_threshold', 0.5, double_desc)
 
-        self._node.declare_parameter('yawrate_p_gain', 100.0, double_desc)
+        self._node.declare_parameter('yawrate_p_gain', 200.0, double_desc)
         self._node.declare_parameter('yawrate_i_gain', 0.0, double_desc)
-        self._node.declare_parameter('yawrate_d_gain', 30.0, double_desc)
+        self._node.declare_parameter('yawrate_d_gain', 0.0, double_desc)
 
-        self._node.declare_parameter('velocity_p_gain', 500.0, double_desc)
-        self._node.declare_parameter('velocity_i_gain', 10.0, double_desc)
+        self._node.declare_parameter('velocity_p_gain', 0.0, double_desc)
+        self._node.declare_parameter('velocity_i_gain', 0.0, double_desc)
         self._node.declare_parameter('velocity_d_gain', 0.0, double_desc)
         
     def get_node_parameters(self) -> None:
@@ -114,11 +110,18 @@ class LoiterActionFloatSam():
         self._loiter_yaw_p_gain = self._node.get_parameter('yaw_p_gain').get_parameter_value().double_value
         self._loiter_yaw_i_gain = self._node.get_parameter('yaw_i_gain').get_parameter_value().double_value
         self._loiter_yaw_d_gain = self._node.get_parameter('yaw_d_gain').get_parameter_value().double_value
+        self._node.get_logger().info(f':yaw_p_gain {self._loiter_yaw_p_gain}')
+        self._node.get_logger().info(f':yaw_i_gain {self._loiter_yaw_i_gain}')
+        self._node.get_logger().info(f':yaw_d_gain {self._loiter_yaw_d_gain}')
         self._loiter_yaw_threshold = self._node.get_parameter('yaw_threshold').get_parameter_value().double_value
 
         self._loiter_yawrate_p_gain = self._node.get_parameter('yawrate_p_gain').get_parameter_value().double_value
         self._loiter_yawrate_i_gain = self._node.get_parameter('yawrate_i_gain').get_parameter_value().double_value
         self._loiter_yawrate_d_gain = self._node.get_parameter('yawrate_d_gain').get_parameter_value().double_value
+
+        self._node.get_logger().info(f':yawrate_p_gain {self._loiter_yawrate_p_gain}')
+        self._node.get_logger().info(f':yawrate_i_gain {self._loiter_yawrate_i_gain}')
+        self._node.get_logger().info(f':yawrate_d_gain {self._loiter_yawrate_d_gain}')
 
         self._loiter_velocity_p_gain = self._node.get_parameter('velocity_p_gain').get_parameter_value().double_value
         self._loiter_velocity_i_gain = self._node.get_parameter('velocity_i_gain').get_parameter_value().double_value
@@ -283,7 +286,7 @@ class LoiterActionFloatSam():
             "yaw_p_gain": self._loiter_yaw_p_gain,
             "yaw_i_gain": self._loiter_yaw_i_gain,
             "yaw_d_gain": self._loiter_yaw_d_gain,
-            "yaw_threshold": self._heading_tolerance,
+            "yaw_threshold": self._loiter_yaw_threshold,
             "yawrate_p_gain": self._loiter_yawrate_p_gain,
             "yawrate_i_gain": self._loiter_yawrate_i_gain,
             "yawrate_d_gain": self._loiter_yawrate_d_gain,
@@ -302,8 +305,20 @@ class LoiterActionFloatSam():
         self._write_captain_parameters(loiter_params)
 
         try:
-            self._timeout = float(goal_request['duration'])
-            self.heading = float(goal_request['heading']) 
+            # Goals can arrive in two shapes:
+            #   1. flat/un-nested:   {"duration": 1800, "heading": 0}
+            #   2. WARA-PS custom-task envelope:
+            #        {"action-name": "loiter-heading",
+            #         "json-params": "{\"duration\": 1800, \"heading\": 0}"}
+            # In the second case the real params live inside "json-params" as a
+            # (possibly still-encoded) JSON string, so unwrap it before reading.
+            params = goal_request
+            if isinstance(params, dict) and 'json-params' in params:
+                inner = params['json-params']
+                params = json.loads(inner) if isinstance(inner, str) else inner
+
+            self._timeout = float(params['duration'])
+            self.heading = float(params['heading']) 
             if self.heading < 0 or self.heading > 360:
                 self._node.get_logger().warning(f'ERROR: Bad input - the heading must be between 0 and 360 degrees')
             self.heading = (self.heading * np.pi)/180 

@@ -13,6 +13,7 @@ from floatsam_controllers.floatsam_common import FloatSam
 from floatsam_go_in_formation.PathParameterizer import PathParameterizer
 from floatsam_go_in_formation.PathSmoothing import PathSmoother
 
+import json
 import time
 import traceback
 import json
@@ -425,6 +426,14 @@ class FloatsamGoInFormationAction():
         self._node.get_logger().info(f'Goal received: {goal_request}')
         
         try:
+            # Failsafe: unwrap the WARA-PS custom-task envelope if present.
+            # Custom tasks arrive as {"action-name": ..., "json-params": "<json string>"};
+            # the real parameters live inside "json-params" as a (possibly still
+            # encoded) JSON string. Fall back to the goal as-is when it's already flat.
+            if isinstance(goal_request, dict) and 'json-params' in goal_request:
+                inner = goal_request['json-params']
+                goal_request = json.loads(inner) if isinstance(inner, str) else inner
+
             self._desired_speed = float(goal_request.get('desired_speed', 2.0))
 
             raw_track = goal_request.get('track', None)
@@ -656,6 +665,16 @@ class FloatsamGoInFormationAction():
             self._node.get_logger().info('Stopping the carrot for this step', throttle_duration_sec=5.0)
             pass 
 
+        # If _prepare_loop failed (e.g. assignment failed because not all robot
+        # positions were available), the parametrizer was never built. Abort the
+        # goal cleanly instead of crashing on a missing attribute.
+        if self._path_parametrizer is None:
+            self._node.get_logger().error('Loop not prepared (assignment failed) - aborting goal')
+            if self._saved_background_parameters:
+                self._write_captain_parameters(self._saved_background_parameters)
+            return False
+
+        self._path_parametrizer.advance_carrot(self._ds)
         main_carrot_position, lookahead_carrot = self._path_parametrizer.get_carrots()
         main_carrot_x = main_carrot_position[0]
         main_carrot_y = main_carrot_position[1]
