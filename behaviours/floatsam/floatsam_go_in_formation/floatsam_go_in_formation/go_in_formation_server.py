@@ -12,6 +12,7 @@ from smarc_action_base.gentler_action_server import GentlerActionServer
 from floatsam_controllers.floatsam_common import FloatSam
 from floatsam_go_in_formation.PathParameterizer import PathParameterizer
 
+import json
 import time
 import traceback
 
@@ -271,6 +272,14 @@ class FloatsamGoInFormationAction():
         self._node.get_logger().info(f'Goal received: {goal_request}')
         
         try:
+            # Failsafe: unwrap the WARA-PS custom-task envelope if present.
+            # Custom tasks arrive as {"action-name": ..., "json-params": "<json string>"};
+            # the real parameters live inside "json-params" as a (possibly still
+            # encoded) JSON string. Fall back to the goal as-is when it's already flat.
+            if isinstance(goal_request, dict) and 'json-params' in goal_request:
+                inner = goal_request['json-params']
+                goal_request = json.loads(inner) if isinstance(inner, str) else inner
+
             self._desired_speed = float(goal_request.get('desired_speed', 2.0))
 
             raw_tracks = goal_request.get('tracks', None)
@@ -405,6 +414,9 @@ class FloatsamGoInFormationAction():
 
     def _prepare_loop(self) -> None: 
         self._node.get_logger().info('Preapering loop.')
+        # Reset each run so a failed assignment can't leave a stale parametrizer
+        # from a previous goal, and _loop_inner can detect the failure.
+        self._path_parametrizer = None
         if not self._HungarianAssignment():
             self._node.get_logger().error('Assignment Failed. Aborting loop preparation')
             return 
@@ -459,6 +471,15 @@ class FloatsamGoInFormationAction():
         return True
 
     def _loop_inner(self):
+        # If _prepare_loop failed (e.g. assignment failed because not all robot
+        # positions were available), the parametrizer was never built. Abort the
+        # goal cleanly instead of crashing on a missing attribute.
+        if self._path_parametrizer is None:
+            self._node.get_logger().error('Loop not prepared (assignment failed) - aborting goal')
+            if self._saved_background_parameters:
+                self._write_captain_parameters(self._saved_background_parameters)
+            return False
+
         self._path_parametrizer.advance_carrot(self._ds)
         main_carrot_position, lookahead_carrot = self._path_parametrizer.get_carrots()
         main_carrot_x = main_carrot_position[0]

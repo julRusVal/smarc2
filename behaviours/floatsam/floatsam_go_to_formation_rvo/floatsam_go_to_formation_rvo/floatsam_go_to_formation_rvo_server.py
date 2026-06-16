@@ -1,3 +1,4 @@
+import json
 import time
 import numpy as np
 import signal
@@ -40,17 +41,17 @@ class BTActionServer(Node):
         self.use_sim = self.get_parameter('use_sim').value
         self._floatsam = FloatSam(self, self.this_robot_name, use_sim=self.use_sim)
 
-        self.declare_parameter('num_robots', 3)
+        self.declare_parameter('num_robots', 2)
         num_robots = self.get_parameter('num_robots').value
         self.robot_ids = list(range(num_robots))
 
         self.declare_parameter('max_velocity', 2.0)  
         self.max_velocity = self.get_parameter('max_velocity').value
 
-        self.declare_parameter('last_point_tolerance_move_path', 0.5)
+        self.declare_parameter('last_point_tolerance_move_path', 1.0)
         self.last_point_tolerance_move_path = self.get_parameter('last_point_tolerance_move_path').value
 
-        self.declare_parameter('arrival_tolerance', 1.0)
+        self.declare_parameter('arrival_tolerance', 2.0)
         self.arrival_tolerance = self.get_parameter('arrival_tolerance').value
         
         self.get_logger().info(f'Robot "{self.this_robot_name}" managing {len(self.robot_ids)} robots (base: "{self.robot_base_name}", IDs: {self.robot_ids})')
@@ -211,6 +212,14 @@ class BTActionServer(Node):
         self.get_logger().info(f'Goal received: {goal_request}')
 
         try:
+            # Failsafe: unwrap the WARA-PS custom-task envelope if present.
+            # Custom tasks arrive as {"action-name": ..., "json-params": "<json string>"};
+            # the real parameters live inside "json-params" as a (possibly still
+            # encoded) JSON string. Fall back to the goal as-is when it's already flat.
+            if isinstance(goal_request, dict) and 'json-params' in goal_request:
+                inner = goal_request['json-params']
+                goal_request = json.loads(inner) if isinstance(inner, str) else inner
+
             formation_points = goal_request.get('formation_points', None)
             
             if formation_points is None:

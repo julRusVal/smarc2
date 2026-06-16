@@ -305,8 +305,20 @@ class LoiterActionFloatSam():
         self._write_captain_parameters(loiter_params)
 
         try:
-            self._timeout = float(goal_request['duration'])
-            self.heading = float(goal_request['heading']) 
+            # Goals can arrive in two shapes:
+            #   1. flat/un-nested:   {"duration": 1800, "heading": 0}
+            #   2. WARA-PS custom-task envelope:
+            #        {"action-name": "loiter-heading",
+            #         "json-params": "{\"duration\": 1800, \"heading\": 0}"}
+            # In the second case the real params live inside "json-params" as a
+            # (possibly still-encoded) JSON string, so unwrap it before reading.
+            params = goal_request
+            if isinstance(params, dict) and 'json-params' in params:
+                inner = params['json-params']
+                params = json.loads(inner) if isinstance(inner, str) else inner
+
+            self._timeout = float(params['duration'])
+            self.heading = float(params['heading']) 
             if self.heading < 0 or self.heading > 360:
                 self._node.get_logger().warning(f'ERROR: Bad input - the heading must be between 0 and 360 degrees')
             self.heading = (self.heading * np.pi)/180 

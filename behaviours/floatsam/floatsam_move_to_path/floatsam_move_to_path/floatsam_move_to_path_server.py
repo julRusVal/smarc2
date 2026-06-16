@@ -238,6 +238,14 @@ class MoveToPathActionFloatSam():
         self._write_captain_parameters(move_to_params)
 
         try:
+            # Failsafe: unwrap the WARA-PS custom-task envelope if present.
+            # Custom tasks arrive as {"action-name": ..., "json-params": "<json string>"};
+            # the real parameters live inside "json-params" as a (possibly still
+            # encoded) JSON string. Fall back to the goal as-is when it's already flat.
+            if isinstance(goal_request, dict) and 'json-params' in goal_request:
+                inner = goal_request['json-params']
+                goal_request = json.loads(inner) if isinstance(inner, str) else inner
+
             try:
                 self._goal_speed = goal_request.get('speed', 2.0)
                 if self._goal_speed == 'standard':

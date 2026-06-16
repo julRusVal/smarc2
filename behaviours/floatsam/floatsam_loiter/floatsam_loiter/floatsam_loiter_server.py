@@ -162,6 +162,14 @@ class LoiterActionFloatSam():
         self._node.get_logger().info(f"Loiter goal received: {goal_request}")
 
         try:
+            # Failsafe: unwrap the WARA-PS custom-task envelope if present.
+            # Custom tasks arrive as {"action-name": ..., "json-params": "<json string>"};
+            # the real parameters live inside "json-params" as a (possibly still
+            # encoded) JSON string. Fall back to the goal as-is when it's already flat.
+            if isinstance(goal_request, dict) and 'json-params' in goal_request:
+                inner = goal_request['json-params']
+                goal_request = json.loads(inner) if isinstance(inner, str) else inner
+
             self._timeout = float(goal_request['timeout'])
             
             self._node.get_logger().info(f"Loiter timeout: {self._timeout} seconds")
