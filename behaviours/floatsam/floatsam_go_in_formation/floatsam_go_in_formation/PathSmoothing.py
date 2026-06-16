@@ -4,6 +4,7 @@ from scipy.interpolate import splprep, splev
 import math
 
 from geometry_msgs.msg import PoseStamped
+#
 
 class PathSmoother:
     def __init__(self, master_track_ps: list[PoseStamped]):
