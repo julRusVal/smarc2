@@ -1,0 +1,74 @@
+/**:
+  ros__parameters:
+    use_robot_localization: true
+
+    sensors:
+      gps_left:
+        input_topic: 'fmu/out/vehicle_gps_position'
+        output_topic: 'core/gps_left'
+        msg_type: 'px4_msgs/SensorGps'
+
+      gps_right:
+        input_topic: 'fmu/out/vehicle_gps_position'
+        output_topic: 'core/gps_right'
+        msg_type: 'px4_msgs/SensorGps'
+
+      rtk_position:
+        input_topic: '/septentrio_gnss_driver/navsatfix'
+        output_topic: 'core/rtk_position'
+        msg_type: 'sensor_msgs/NavSatFix'
+
+      imu:
+        input_topic: 'fmu/out/sensor_combined'
+        output_topic: 'core/imu'
+        msg_type: 'px4_msgs/SensorCombined'
+
+      depth_pressure:
+        input_topic: '/floatsam/hardware/pressure/depth'
+        output_topic: 'smarc/depth'
+        msg_type: 'sensor_msgs/FluidPressure'
+
+      dvl:
+        input_topic: '/floatsam/hardware/dvl/data'
+        output_topic: 'core/dvl'
+        msg_type: 'sensor_msgs/Range'
+
+      leak:
+        input_topic: '/floatsam/hardware/leak_sensor'
+        output_topic: 'core/leak'
+        msg_type: 'std_msgs/Bool'
+
+      battery:
+        input_topic: 'fmu/out/battery_status_v1'
+        output_topic: 'smarc/battery_percent'
+        msg_type: 'px4_msgs/BatteryStatus'
+
+    actuators:
+      thruster_port_cmd:
+        input_topic: 'actuators/thruster_port_cmd'
+        msg_type: 'std_msgs/Float32'
+
+      thruster_strb_cmd:
+        input_topic: 'actuators/thruster_strb_cmd'
+        msg_type: 'std_msgs/Float32'
+
+      px4_motors:
+        output_topic: 'fmu/in/actuator_motors'
+        msg_type: 'px4_msgs/ActuatorMotors'
+
+    payload:
+      sidescan:
+        input_topic: '/floatsam/hardware/sidescan/image'
+        output_topic: 'payload/sidescan'
+        msg_type: 'sensor_msgs/Image'
+
+      mbes_bathy:
+        input_topic: '/floatsam/hardware/mbes/points'
+        output_topic: 'payload/mbes_bathy_points'
+        msg_type: 'sensor_msgs/PointCloud2'
+
+    compute_from_odom:
+      heading: 'smarc/heading'
+      course: 'smarc/course'
+      speed: 'smarc/speed'
+      latlon: 'smarc/latlon'
