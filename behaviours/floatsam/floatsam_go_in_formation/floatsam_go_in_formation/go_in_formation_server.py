@@ -51,6 +51,8 @@ class FloatsamGoInFormationAction():
             depth=1
         )
 
+        # The carrot advance step (self._ds) MUST be derived from this same value,
+        # since _loop_inner is what actually advances the shared progress.
         self._loop_frequency = 10
 
         self._best_effort_qos = QoSProfile(
@@ -144,6 +146,9 @@ class FloatsamGoInFormationAction():
         self._robot_ids        = range(self._num_robots)
         self._robot_base_name  = '_'.join(self._this_robot_name.split('_')[:-1])
         self._others_arrived_flag = False
+        # ds is the shared progress increment per control tick, in MASTER arc length
+        # (metres). It must use the actual loop rate, not update_rate, or the carrot
+        # moves at the wrong speed (e.g. update_rate=20 with a 10 Hz loop = half speed).
         self._ds = self._carrot_speed / self._loop_frequency
         self.distance_error = 0.0
 
@@ -160,6 +165,9 @@ class FloatsamGoInFormationAction():
         self._velocity_i_gain = self._node.get_parameter('velocity_i_gain').get_parameter_value().double_value
         self._velocity_d_gain = self._node.get_parameter('velocity_d_gain').get_parameter_value().double_value
 
+    # ------------------------------------------------------------------
+    # MQTT bridge (real hardware only)
+    # ------------------------------------------------------------------
 
     def _setup_mqtt_client(self) -> None:
         try:
@@ -253,6 +261,7 @@ class FloatsamGoInFormationAction():
                 f'MQTT: Failed to publish mission_ready: {e}', throttle_duration_sec=5.0
             )
 
+    # ------------------------------------------------------------------
 
     def create_clients(self) -> None:
         captain_node_name = f'/{self._this_robot_name}/captain'
@@ -397,10 +406,30 @@ class FloatsamGoInFormationAction():
         )
 
 
+#     Goal Structure :
+#    {
+#        'desired_speed' : 2.0,
+#        'track' : 
+#        
+#            
+#                {'latitude': 59.00, 'longitude': 18.00} # Inner list element 0
+#                {'latitude': 59.01, 'longitude': 18.01} # Inner list element 1
+#            
+#   
+#    }
+#           
+
+
+# Functions for GentlerActionServer
+
     def _on_goal_received(self, goal_request: dict) -> bool:
         self._node.get_logger().info(f'Goal received: {goal_request}')
         
         try:
+            # Failsafe: unwrap the WARA-PS custom-task envelope if present.
+            # Custom tasks arrive as {"action-name": ..., "json-params": "<json string>"};
+            # the real parameters live inside "json-params" as a (possibly still
+            # encoded) JSON string. Fall back to the goal as-is when it's already flat.
             if isinstance(goal_request, dict) and 'json-params' in goal_request:
                 inner = goal_request['json-params']
                 goal_request = json.loads(inner) if isinstance(inner, str) else inner
@@ -532,10 +561,12 @@ class FloatsamGoInFormationAction():
 
         self._path_smoother = PathSmoother(master_track_ps=self._track_in_map)
 
+        # 2. Get formation width parameter dynamically (defaulting to 4.0 if not declared)
         formation_width = 4.0 
 
         max_offset = float(formation_width)
 
+        # 4. Run the curvature check loop against the full width
         master_x, master_y, u_fine, tck = self._path_smoother.smooth_track(
             num_points=100, 
             initial_smoothing=2.0,
@@ -544,14 +575,17 @@ class FloatsamGoInFormationAction():
             num=15 
         )
 
+        # 5. Extract shared progress coordinate
         master_s = self._path_smoother.master_arclength(master_x, master_y)
 
+        # 6. Generate the master-anchored parallel tracks
         generated_tracks_raw = self._path_smoother.compute_dynamic_tracks(
             master_x, master_y, u_fine, tck, 
             num_robots=self._num_robots,
             formation_width=formation_width 
         )
 
+        # 7. Package coordinates back into PoseStamped structures
         self._tracks_in_map = []
         for track_list in generated_tracks_raw:
             pose_list = []
@@ -562,10 +596,12 @@ class FloatsamGoInFormationAction():
                 pose_list.append(ps)
             self._tracks_in_map.append(pose_list)
 
+        # 8. Run Hungarian Task Assignment
         if not self._HungarianAssignment():
             self._node.get_logger().error('Assignment Failed. Aborting loop preparation')
             return 
 
+        # 9. Initialize parameterizer with this agent's allocated track
         self._path_parametrizer = PathParameterizer(
             self._this_robot_waypoints, master_s, self._look_a_head_distance)
         self._move_to_pending = False
@@ -587,6 +623,7 @@ class FloatsamGoInFormationAction():
 
         self._yaw_reference_publisher.publish(yaw_msg)
         self._speed_reference_publisher.publish(speed_msg)
+        #self._move_on_place_publisher.publish(move_on_place_msg)
 
     def _everyone_following(self) -> bool:
         required_robot_count = self._num_robots - 1 
@@ -637,6 +674,7 @@ class FloatsamGoInFormationAction():
                 self._write_captain_parameters(self._saved_background_parameters)
             return False
 
+        self._path_parametrizer.advance_carrot(self._ds)
         main_carrot_position, lookahead_carrot = self._path_parametrizer.get_carrots()
         main_carrot_x = main_carrot_position[0]
         main_carrot_y = main_carrot_position[1]
@@ -649,6 +687,8 @@ class FloatsamGoInFormationAction():
                 
         self.distance_error = math.hypot(main_carrot_x - robot_x, main_carrot_y - robot_y)
 
+        #self._node.get_logger().info(f'robot_x:{robot_x}, robot_y:{robot_y} and main_carrot_x:{main_carrot_x}, main_carrot_y:{main_carrot_y}', throttle_duration_sec=2.0)
+        #self._node.get_logger().info(f'The distace from the carrot is:{self.distance_error}',throttle_duration_sec=3.0)
         desired_heading = math.atan2(main_carrot_y - robot_y, main_carrot_x - robot_x)
         v_desired = self._carrot_speed + self.distance_error * self._catch_up_gain
 
@@ -680,6 +720,14 @@ class FloatsamGoInFormationAction():
             self.thruster_strb_pub.publish(thruster_strb_msg) 
         else:
             self._publish_references(v_command, desired_heading)
+            #des_deg = desired_heading * 180 / math.pi
+            #if des_deg < 0:
+            #    des_deg += 360
+            #error_heading = self._heading - des_deg
+            #self._node.get_logger().info(f'des_deg:{des_deg}', throttle_duration_sec=2.0)
+            #self._node.get_logger().info(f'self._heading:{self._heading}', throttle_duration_sec=2.0)
+#
+            #self._node.get_logger().info(f'error_heading:{error_heading}', throttle_duration_sec=2.0)
         
         if self._is_mission_complete():
             self._node.get_logger().info('Mission complete. All robots reached end of tracks.')

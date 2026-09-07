@@ -54,6 +54,10 @@ class SmarcTopicsPublisher(Node):
         self.thruster_limit = self.get_parameter("thruster_limit").get_parameter_value().double_value
         self.master_robot_name = self.get_parameter('master_floatsam').get_parameter_value().string_value
         self.num_of_robots = self.get_parameter('num_of_robots').get_parameter_value().integer_value
+        self.use_robot_localization = (
+            self.get_parameter('use_robot_localization').get_parameter_value().bool_value
+            if self.has_parameter('use_robot_localization') else False
+        )
 
         self.gps_antenna_offset_x = 0.0  # Update to 0.15 when measured
         self.gps_antenna_offset_y = 0.0
@@ -467,9 +471,6 @@ class SmarcTopicsPublisher(Node):
         return callback
     
 
-    def _non_name_spaced_gps_cb(self, msg: NavSatFix):
-        self._name_spaced_gps_pub.publish(msg)
-
     def _setup_topic_bridges(self):
         """Set up subscribers and publishers for all configured topics.
         Output topics are relative — PushRosNamespace handles the robot prefix."""
@@ -511,18 +512,10 @@ class SmarcTopicsPublisher(Node):
             self.rtk_position_pub = self.create_publisher(NavSatFix, sensors['rtk_position']['output_topic'], 10)
             self.get_logger().info(f'  RTK Position: {sensors["rtk_position"]["input_topic"]} → {sensors["rtk_position"]["output_topic"]}')
 
-            # PX4 RTK injection — always absolute, always robot-scoped
             px4_rtk_topic = sensors['rtk_position'].get('output_for_px4', None)
-            if not self.use_sim and px4_rtk_topic:
+            if not self.use_sim and px4_rtk_topic and not self.use_robot_localization:
                 self.sensor_gps_pub = self.create_publisher(SensorGps, px4_rtk_topic, self.px4_qos)
                 self.get_logger().info(f'  RTK: Injection to {px4_rtk_topic} ENABLED')
-
-            self._non_name_spaced_gps = self.create_subscription(
-                NavSatFix, '/ublox_gps_node/fix', self._non_name_spaced_gps_cb, 10)
-            self._name_spaced_gps_pub = self.create_publisher(
-                NavSatFix, 'ublox_gps_node/fix', 10)
-        
-
 
         # IMU
         if 'imu' in sensors:
@@ -561,7 +554,15 @@ class SmarcTopicsPublisher(Node):
         else:
             odom_config = None
 
-        if odom_config:
+        if self.use_robot_localization and not self.use_sim:
+            self.create_subscription(
+                Odometry, 'smarc/odom', self._smarc_odom_derived_callback, self.odom_in_map_qos)
+            self.create_subscription(
+                Odometry, 'smarc/odom_in_map', self._mqtt_odom_in_map_callback, self.odom_in_map_qos)
+            self._publish_static_sensor_transforms()
+            self.get_logger().info(
+                'robot_localization mode: smarc/odom from usv_localization_bringup')
+        elif odom_config:
             msg_class = self._get_message_class(odom_config['msg_type'])
             self.create_subscription(msg_class, odom_config['input_topic'], self._odom_callback, self.px4_qos)
             self.odom_pub = self.create_publisher(Odometry, odom_config['output_topic'], 10)
@@ -607,12 +608,12 @@ class SmarcTopicsPublisher(Node):
 
     def _port_cmd_callback(self, msg: Float32):
         raw = msg.data / self.thruster_limit
-        self.latest_port_cmd = max(-1.0, min(1.0, raw))
+        self.latest_port_cmd = max(-0.7, min(0.7, raw))
         self.last_cmd_time = self.get_clock().now()
 
     def _strb_cmd_callback(self, msg: Float32):
         raw = msg.data / self.thruster_limit
-        self.latest_strb_cmd = max(-1.0, min(1.0, raw))
+        self.latest_strb_cmd = max(-0.7, min(0.7, raw))
         self.last_cmd_time = self.get_clock().now()
 
     def _publish_actuators(self):
@@ -845,24 +846,6 @@ class SmarcTopicsPublisher(Node):
                 )
             except Exception as e:
                 self.get_logger().error(f"Failed to set Askö datum: {e}")
-        # --- ADDED: Calculate the dynamic Map -> Odom offset ---
-        if self.datum_is_set and not self.use_sim:
-            try:
-                utm_point = convert_latlon_to_utm(geopoint)
-                # Absolute map position
-                global_map_x = utm_point.point.x - self.datum_utm_x
-                global_map_y = utm_point.point.y - self.datum_utm_y
-                
-                # Position relative to THIS robot's local map
-                true_local_map_x = global_map_x - self.local_map_offset_x
-                true_local_map_y = global_map_y - self.local_map_offset_y
-                
-                # The "rubber band" difference between true GPS and drifting PX4 Odom
-                self.odom_offset_x = true_local_map_x - self.raw_px4_x
-                self.odom_offset_y = true_local_map_y - self.raw_px4_y
-            except Exception:
-                pass
-
     def _publish_static_transforms(self):
         """Creates the permanent links for the shared multi-agent map"""
         transforms_to_publish = []
@@ -895,6 +878,8 @@ class SmarcTopicsPublisher(Node):
             std_msg = msg
         else:
             std_msg = Imu()
+            std_msg.header.stamp = self.get_clock().now().to_msg()
+            std_msg.header.frame_id = f'{self.robot_name}/base_link'
             std_msg.angular_velocity.x = float(msg.gyro_rad[0])
             std_msg.angular_velocity.y = float(msg.gyro_rad[1])
             std_msg.angular_velocity.z = float(msg.gyro_rad[2])
@@ -1084,6 +1069,38 @@ class SmarcTopicsPublisher(Node):
         self._compute_and_publish_derived_odom(std_msg)
 
     
+    def _publish_static_sensor_transforms(self):
+        """Sonar and modem links — published once at startup when RLF owns odom TF."""
+        stamp = self.get_clock().now().to_msg()
+        base_link = f'{self.robot_name}/base_link'
+
+        sonar_roll = math.pi
+        sonar_pitch = math.radians(30.0)
+        cr, sr = math.cos(sonar_roll / 2.0), math.sin(sonar_roll / 2.0)
+        cp, sp = math.cos(sonar_pitch / 2.0), math.sin(sonar_pitch / 2.0)
+        sonar_qw = cr * cp
+        sonar_qx = sr * cp
+        sonar_qy = cr * sp
+        sonar_qz = -sr * sp
+
+        t_sonar = FloatSamTransforms.create_static_tf_transform(
+            stamp, base_link, f'{self.robot_name}/sonar_link',
+            self.sonar_offset_x, self.sonar_offset_y, self.sonar_offset_z,
+            sonar_qw, sonar_qx, sonar_qy, sonar_qz,
+        )
+        t_modem = FloatSamTransforms.create_static_tf_transform(
+            stamp, base_link, f'{self.robot_name}/modem_link',
+            self.modem_offset_x, self.modem_offset_y, self.modem_offset_z,
+        )
+        self.static_tf_broadcaster.sendTransform([t_sonar, t_modem])
+
+    def _smarc_odom_derived_callback(self, msg: Odometry):
+        self.latest_odom = msg
+        self._compute_and_publish_derived_odom(msg)
+
+    def _mqtt_odom_in_map_callback(self, msg: Odometry):
+        self._publish_odom_to_mqtt(msg)
+
     def _compute_and_publish_derived_odom(self, std_msg: Odometry):
         orientation_list = [
             std_msg.pose.pose.orientation.x,

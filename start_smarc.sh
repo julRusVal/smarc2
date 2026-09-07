@@ -26,9 +26,9 @@ else
     docker run -it \
         --name ${CONTAINER_NAME} \
         --network host \
-	--privileged \
         --env-file swepos_credentials.env \
         --device=/dev/ublox_gps \
+	--device=/dev/succorfish \
         -v $(pwd):/home/smarc2user/colcon_ws/src/smarc2 \
         alebax/smarc2:latest
 fi
