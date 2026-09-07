@@ -1,5 +1,6 @@
 __pycache__
 .vscode
+.DS_Store
 
 .idea/
 
@@ -13,3 +14,5 @@ psdk_interfaces
 
 COLCON_IGNORE
 perception/alars/auv_alars_perception/datasets/input_video.mp4
+swepos_credentials.env
+swepos_credentials.env
