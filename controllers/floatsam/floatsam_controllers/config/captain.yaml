@@ -1,0 +1,22 @@
+/**:
+  ros__parameters:
+    robot_name: "floatsam_usv"
+    update_rate: 20.0
+    yaw_p_gain: 0.3
+    yaw_i_gain: 0.0
+    yaw_d_gain: 0.1
+    yaw_output_limit: 1.0
+    yaw_threshold: 0.5
+    yawrate_p_gain: 300.0
+    yawrate_i_gain: 0.0
+    yawrate_d_gain: 30.0
+    yawrate_output_limit: 800.0
+    velocity_p_gain: 500.0
+    velocity_i_gain: 10.0
+    velocity_d_gain: 0.0
+    velocity_output_limit: 1000.0
+    rpm_deadband: 50.0
+    thruster_limit: 1000.0
+    turn_in_place_min_rpm: 100.0
+    turn_in_place_gain: 10.0
+    max_delta_rpm: 200.0

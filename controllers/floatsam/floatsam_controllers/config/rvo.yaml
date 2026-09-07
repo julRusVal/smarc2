@@ -1,0 +1,13 @@
+/**:
+  ros__parameters:
+    time_horizon: 2.0
+    safety_margin: 5.0
+    max_speed: 2.0
+    update_rate: 20.0
+    speed_step: 0.25
+    num_coarse_angles: 60
+    num_fine_angles: 60
+    w_deviation: 1.0
+    w_goal: 1.5
+    stop_penalty: 2.0
+    min_useful_speed: 0.1
